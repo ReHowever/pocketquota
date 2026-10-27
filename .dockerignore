@@ -1,0 +1,10 @@
+.git
+.data
+.demo-data
+.test-data
+.env*
+private
+__pycache__
+*.sqlite*
+*.token
+tests

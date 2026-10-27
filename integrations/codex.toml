@@ -1,0 +1,7 @@
+# Merge into your PERSONAL Codex configuration. Set the environment privately.
+[mcp_servers.pocketquota]
+command = "python3"
+args = ["-m", "pocketquota.mcp"]
+env_vars = ["POCKETQUOTA_URL", "POCKETQUOTA_TOKEN"]
+startup_timeout_sec = 15
+tool_timeout_sec = 30

@@ -1,0 +1,18 @@
+services:
+  pocketquota:
+    build: .
+    ports:
+      - "127.0.0.1:18790:18790"
+    volumes:
+      - pocketquota-data:/data
+    environment:
+      # For a reverse proxy, set to the EXACT https:// origin, without a path.
+      POCKETQUOTA_ORIGIN: ${POCKETQUOTA_ORIGIN:-http://localhost:18790}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+volumes:
+  pocketquota-data:

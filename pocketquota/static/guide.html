@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PocketQuota · 使用指南</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          sans-serif;
+        background: #131316;
+        color: #ededf4;
+        line-height: 1.8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      header {
+        border-bottom: 1px solid #33333d;
+        padding: 22px max(24px, calc((100vw - 980px) / 2));
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        white-space: nowrap;
+      }
+      header strong {
+        font-size: 19px;
+        letter-spacing: -0.5px;
+      }
+      a {
+        color: #a9a1ff;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      main {
+        max-width: 980px;
+        margin: 50px auto;
+        padding: 0 24px 80px;
+      }
+      h1 {
+        font-size: 42px;
+        letter-spacing: -1.5px;
+        line-height: 1.3;
+        font-weight: 600;
+      }
+      h2 {
+        font-size: 23px;
+        font-weight: 550;
+        margin-top: 50px;
+        padding-top: 20px;
+        border-top: 1px solid #33333d;
+      }
+      h3 {
+        font-size: 16px;
+        margin-top: 25px;
+      }
+      p,
+      li {
+        color: #b2b2be;
+        font-size: 14px;
+      }
+      nav {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 30px 0;
+      }
+      nav a {
+        font-size: 12px;
+        border: 1px solid #383842;
+        border-radius: 20px;
+        padding: 5px 13px;
+        color: #cccbd9;
+      }
+      .lead {
+        font-size: 17px;
+        color: #9b9ba9;
+        max-width: 650px;
+      }
+      .card {
+        padding: 20px;
+        border: 1px solid #33333d;
+        border-radius: 14px;
+        background: #1c1c22;
+        margin: 20px 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+        margin: 18px 0;
+      }
+      td,
+      th {
+        padding: 13px;
+        border-bottom: 1px solid #34343e;
+        text-align: left;
+      }
+      td {
+        color: #b9b9c6;
+      }
+      code {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: #b7acff;
+        background: #24232f;
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: #1e1d27;
+        border: 1px solid #373345;
+        padding: 20px;
+        border-radius: 12px;
+      }
+      pre code {
+        padding: 0;
+        background: none;
+      }
+      strong {
+        color: #ededf4;
+      }
+      .note {
+        color: #dfb98b;
+      }
+      .danger {
+        border-left: 3px solid #ec6e90;
+        padding-left: 18px;
+      }
+      footer {
+        color: #767684;
+        font-size: 12px;
+        margin-top: 45px;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          background: #fafafa;
+          color: #22222c;
+        }
+        header,
+        h2,
+        td,
+        th {
+          border-color: #e2e2ea;
+        }
+        p,
+        li,
+        td {
+          color: #636373;
+        }
+        strong {
+          color: #252530;
+        }
+        .card {
+          background: #fff;
+          border-color: #e2e2ea;
+        }
+        pre {
+          background: #f1eff8;
+          border-color: #e0dbee;
+        }
+        code {
+          color: #6652a5;
+          background: #eeebf7;
+        }
+        a {
+          color: #6554ba;
+        }
+        nav a {
+          color: #656070;
+          border-color: #dfdce8;
+        }
+      }
+      @media (max-width: 600px) {
+        main {
+          margin-top: 30px;
+        }
+        h1 {
+          font-size: 32px;
+        }
+        header {
+          padding: 20px;
+          font-size: 12px;
+        }
+        td,
+        th {
+          padding: 9px;
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header><strong>PocketQuota</strong><a href="/">返回账本 ↗</a></header>
+    <main>
+      <h1>把额度交给规则。<br />把选择留给自己。</h1>
+      <p class="lead">
+        像管理 Agent 一样管理自己的消费习惯。这里说明资金池、结算、对账与 Agent
+        接入；主界面只保留你每天需要的操作。
+      </p>
+      <nav>
+        <a href="#start">开始</a><a href="#pools">资金池</a
+        ><a href="#settle">结算</a><a href="#review">对账</a
+        ><a href="#schedule">自动入账</a><a href="#agents">Agent</a
+        ><a href="#appearance">外观</a><a href="#privacy">隐私</a>
+      </nav>
+      <h2 id="start">01 / 建立账本</h2>
+      <p>
+        服务启动后，从数据目录的
+        <code>admin.token</code>
+        取得管理员登录口令。首次进入填写当前资金池余额、每日限额和时区。时区在初始化后固定，避免更改后同一天被重复结算。默认使用人民币，金额精确到分。
+      </p>
+      <p>
+        演示模式使用虚构数据，可自由试用；演示数据与正式账本请使用不同数据目录。一个实例服务一个个人账本，多个
+        Agent 可以协作访问；不是多租户网站。
+      </p>
+      <h2 id="pools">02 / 三个资金池，一套额度</h2>
+      <table>
+        <tr>
+          <th>资金池</th>
+          <th>作用</th>
+          <th>如何选择</th>
+        </tr>
+        <tr>
+          <td>日常池</td>
+          <td>承担日常消费，并受每日限额约束</td>
+          <td>默认选择</td>
+        </tr>
+        <tr>
+          <td>灵活池</td>
+          <td>接收每日结余，承担日常不足和额外消费</td>
+          <td>可直接指定，不计入每日限额</td>
+        </tr>
+        <tr>
+          <td>保底池</td>
+          <td>独立保留的预算</td>
+          <td>仅明确选择时使用，永不自动补足</td>
+        </tr>
+      </table>
+      <div class="card">
+        <strong>示例</strong>
+        <p>
+          每日限额 ¥60，今天已经花了 ¥50，再从日常池记一笔 ¥25：日常承担
+          ¥10，灵活承担 ¥15。如果日常池实际只剩 ¥3，则由日常承担 ¥3、灵活承担
+          ¥22。流水中会显示实际拆分。
+        </p>
+      </div>
+      <p>
+        每日限额是消费约束，不是一笔新收入。每天零点仅重置额度计数，绝不凭空给日常池增加资金。支出已发生时，即使超额也会如实记录；资金池允许出现负数，用于暴露缺口。
+      </p>
+      <p>
+        可消费预算 = 日常池 + 灵活池。合计 ≤ 0 时，整页进入红色“赤字 ·
+        已破产”状态；这是个人预算提示，不是法律意义的破产认定。保底池不计入可消费预算。
+      </p>
+      <p>
+        “记一笔”支持支出、收入和池间转账，可指定日期与资金池。“预算与规则”可修改池余额，必须填写原因；系统新增差额记录，不覆盖旧账。
+      </p>
+      <h2 id="settle">03 / 每日结算与补记</h2>
+      <p>
+        在设定的时间把未用额度从日常池转入灵活池，最多转移日常池实际可用余额，不生成虚拟资金。超额支出在记账时已由灵活池承担，结算时不会再次扣款。
+      </p>
+      <ul>
+        <li>可以提前结算；同一日期反复结算不会重复划走资金。</li>
+        <li>
+          结算后补记或撤销，会重新计算当日承担额及结余差额，相关冲正保留在流水里。
+        </li>
+        <li>
+          日限规则从今天或未来生效，历史规则保留。降低当日限额可能重新分配已结算的日常／灵活承担额。
+        </li>
+        <li>跨日补记会改变历史余额；此前的对账记录会标为“需复核”。</li>
+        <li>对账是核对余额，结算是划转额度，两者相互独立。</li>
+      </ul>
+      <h2 id="review">04 / 每日、每月对账</h2>
+      <p>
+        选择日期或已结束的月份，先看账面余额，再填写三个池的<strong>实际核对金额</strong>。系统记录差异，不自动“调平”。有差异时先检查遗漏、重复、退款和池归属，再决定是否调整余额。
+      </p>
+      <p>
+        每月按设定日期和时间生成上月待对账项目。没有人工核对，不会标成已对账；后续补记造成变化时需要再次复核。
+      </p>
+      <p>
+        流水可导出
+        CSV。原记录不能直接抹除；发现记错时先撤销，再重新记账。撤销行为、原流水和执行来源都会保留。
+      </p>
+      <h2 id="schedule">05 / 每日补贴与每月自动入账</h2>
+      <p>
+        在“预算与规则 →
+        自动入账计划”设置金额、资金池、日期、时间与频率。支持每日及每月。设为每月
+        31 日时，二月等短月使用当月最后一天。计划可以修改或暂停。
+      </p>
+      <p>
+        后台每 30
+        秒检查一次。服务离线期间不执行；恢复后按时间顺序补记到期项目。同一计划同一期仅入账一次。新建或修改的计划从当天起生效，不追溯补发更早月份。
+      </p>
+      <p class="note">
+        自动入账只是记账，不会发起银行扣款或转账。请仅为确定到账的资金设置自动计划，否则实核对账时会出现差额。
+      </p>
+      <h2 id="agents">06 / 连接 Agent</h2>
+      <p>
+        先在“Agent”页创建独立令牌。只读令牌只能查账；读写令牌可记账、撤销、对账和确认通知。需要通过
+        Agent
+        对话管理预算时，可显式选择“预算管理”权限；该权限可修改规则、计划与池余额，但仍不能创建其他令牌或提升权限。默认只读。
+      </p>
+      <p>
+        支持标准 MCP stdio，也提供 REST API 与 OpenAPI 文档。Codex、Claude Code
+        / Desktop、Cursor、VS Code Copilot、Gemini CLI 的示例在仓库
+        <code>integrations/</code>。不支持 MCP 的框架可以调用
+        <code>pocketquota.mcp.call()</code> 或 REST。
+      </p>
+      <pre><code>{
+  "mcpServers": {
+    "pocketquota": {
+      "command": "python3",
+      "args": ["-m", "pocketquota.mcp"],
+      "env": {
+        "POCKETQUOTA_URL": "https://budget.example.com",
+        "POCKETQUOTA_TOKEN": "&lt;专用令牌&gt;"
+      }
+    }
+  }
+}</code></pre>
+      <p>
+        在 Agent 所在机器安装本项目，Python
+        使用该环境的可执行文件。远程地址必须使用有效 HTTPS 证书；MCP
+        桥接不跟随重定向，不发送密钥到其他地址。这里的
+        <code>https://budget.example.com</code> 是占位示例。
+      </p>
+      <h3>避免重复记账</h3>
+      <p>
+        每个独立记账请求生成稳定的 <code>request_id</code>（REST 使用
+        <code>Idempotency-Key</code
+        >）。网络重试必须复用同一个键；相同键搭配不同内容会被拒绝。记录金额使用字符串，如
+        <code>"12.50"</code>；返回金额以整数分为单位。
+      </p>
+      <h3>赤字通知</h3>
+      <p>
+        预算第一次耗尽时生成一条通知事件。持续赤字不再新增；恢复后再次耗尽则生成新事件。指定一个通知
+        Agent 定时读取
+        <code>budget_notifications</code
+        >，仅在获得用户授权的私聊中发送，成功后调用
+        <code>budget_ack_notification</code>。空列表保持安静。
+      </p>
+      <p class="note">
+        需要在你的 Agent 宿主中配置这个通知任务，MCP 工具本身不会自主运行。WebUI
+        不直接联系 QQ、邮箱等渠道。投递使用至少一次语义：通知程序应按事件 ID
+        去重，不能在投递失败时提前确认。
+      </p>
+      <h2 id="appearance">07 / 外观与动效</h2>
+      <p>
+        右上角“外观”可选深空黑或极简白、线形光轨或圆环、三套光谱，以及主条显示今日额度或总预算。
+      </p>
+      <p>
+        支出成功后额度出现粒子消散，收入成功后出现光带汇入。动画不改变金额。收入不会自动增加每日限额；想直观看到入账变化可把主条切到“总可消费预算”。系统开启“减少动态效果”时会自动停用动画，也可以手动关闭。外观偏好保存在当前浏览器。
+      </p>
+      <h2 id="privacy">08 / 数据与部署边界</h2>
+      <ul>
+        <li>无外部字体、图片、分析统计或第三方前端脚本。</li>
+        <li>数据库在你的部署实例中；没有云同步或银行连接。</li>
+        <li>网页使用 HttpOnly 会话 Cookie；Agent 令牌在数据库中只存哈希。</li>
+        <li>
+          令牌和实际账目不得上传到公开仓库。备份时使用 SQLite backup
+          API，不能只复制运行中的主数据库而忽略 WAL。
+        </li>
+        <li>
+          首次公开版本为个人自托管版。公网使用请放在 TLS 反向代理后并设置精确的
+          <code>POCKETQUOTA_ORIGIN</code>。
+        </li>
+      </ul>
+      <footer>
+        PocketQuota · MIT · 独立项目，与 OpenAI 或其他 Agent 厂商无隶属关系。
+      </footer>
+    </main>
+  </body>
+</html>

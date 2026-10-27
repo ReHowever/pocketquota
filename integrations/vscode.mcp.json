@@ -1,0 +1,21 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "pocketquota-token",
+      "description": "PocketQuota agent token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "pocketquota": {
+      "command": "python3",
+      "args": ["-m", "pocketquota.mcp"],
+      "env": {
+        "POCKETQUOTA_URL": "https://budget.example.com",
+        "POCKETQUOTA_TOKEN": "${input:pocketquota-token}"
+      },
+      "type": "stdio"
+    }
+  }
+}

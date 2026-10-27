@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pocketquota"
+version = "0.1.0"
+description = "Manage your spending habits like you manage an agent. Self-hosted budgets, WebUI and MCP."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = []
+
+[project.scripts]
+pocketquota = "pocketquota.server:main"
+pocketquota-mcp = "pocketquota.mcp:main"
+
+[tool.setuptools.packages.find]
+include = ["pocketquota*"]
+
+[tool.setuptools.package-data]
+pocketquota = ["static/*"]

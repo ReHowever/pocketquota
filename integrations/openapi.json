@@ -1,0 +1,825 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PocketQuota Agent API",
+    "version": "0.1.0",
+    "description": "Personal budget journal. No bank transactions. One book per deployment. Read/write scoped tokens."
+  },
+  "servers": [
+    {
+      "url": "https://budget.example.com",
+      "description": "Replace with your own instance"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "paths": {
+    "/api/dashboard": {
+      "get": {
+        "operationId": "budget_status",
+        "description": "Read today's quota, pool balances, overspend and insolvency status. Money returned in integer cents.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/entries": {
+      "get": {
+        "operationId": "budget_transactions",
+        "description": "Read dated journal entries, including reversals and automatic allocations.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "budget_record",
+        "description": "Record user-authorized expense, income or transfer. Default pool daily. Excess daily quota or exhausted daily pool is immediately covered by flex. Reuse request_id when retrying this same user request.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["expense", "income", "transfer"]
+                  },
+                  "amount": {
+                    "type": "string",
+                    "pattern": "^\\d+(\\.\\d{1,2})?$",
+                    "description": "Decimal currency string, e.g. 12.50. Never float."
+                  },
+                  "pool": {
+                    "type": "string",
+                    "enum": ["daily", "flex", "reserve"]
+                  },
+                  "to_pool": {
+                    "type": "string",
+                    "enum": ["daily", "flex", "reserve"]
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": ["amount"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reverse": {
+      "post": {
+        "operationId": "budget_reverse",
+        "description": "Reverse an incorrect manual transaction, preserving audit. Only on user authorization; do not silently delete or hide history.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary": {
+      "get": {
+        "operationId": "budget_summary",
+        "description": "Read expected pool balances and settlements for a day YYYY-MM-DD or completed month YYYY-MM.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/reviews": {
+      "post": {
+        "operationId": "budget_reconcile",
+        "description": "Record a user's explicitly supplied real balances. Never fabricate actual balances from expected values. Does not automatically adjust the ledger.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "period": {
+                    "type": "string"
+                  },
+                  "actual": {
+                    "type": "object",
+                    "properties": {
+                      "daily": {
+                        "type": "string"
+                      },
+                      "flex": {
+                        "type": "string"
+                      },
+                      "reserve": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["daily", "flex", "reserve"],
+                    "additionalProperties": false
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": ["period", "actual"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "budget_notifications",
+        "description": "List unacknowledged budget-exhausted notifications. Only notify the ledger owner through an authorized channel. Empty list means remain silent. Use event ID to deduplicate delivery.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/notifications/ack": {
+      "post": {
+        "operationId": "budget_ack_notification",
+        "description": "Acknowledge an event only AFTER successful owner notification. Failed delivery must remain pending. Use one designated notification agent per ledger.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "post": {
+        "operationId": "budget_configure",
+        "description": "Requires manage scope and explicit user request. Change daily allowance or settlement/review times. Fetch budget_status first for settings.revision; effective date cannot be in the past.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer"
+                  },
+                  "daily_limit": {
+                    "type": "string",
+                    "pattern": "^\\d+(\\.\\d{1,2})?$",
+                    "description": "Decimal currency string, e.g. 12.50. Never float."
+                  },
+                  "effective": {
+                    "type": "string"
+                  },
+                  "settle_time": {
+                    "type": "string"
+                  },
+                  "review_day": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 28
+                  },
+                  "review_time": {
+                    "type": "string"
+                  },
+                  "carry_over": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["revision"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/adjust": {
+      "post": {
+        "operationId": "budget_adjust_pool",
+        "description": "Requires manage scope and explicit user request. Set a pool's actual budget balance with an audit reason; this creates an adjustment entry, not a bank transfer.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pool": {
+                    "type": "string",
+                    "enum": ["daily", "flex", "reserve"]
+                  },
+                  "balance": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": ["pool", "balance", "reason"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schedules": {
+      "post": {
+        "operationId": "budget_schedule",
+        "description": "Requires manage scope and explicit user request. Create/edit/pause a daily or monthly credit schedule. Only accounting, not a payment. Existing schedule IDs come from budget_schedules.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "pattern": "^\\d+(\\.\\d{1,2})?$",
+                    "description": "Decimal currency string, e.g. 12.50. Never float."
+                  },
+                  "pool": {
+                    "type": "string",
+                    "enum": ["daily", "flex", "reserve"]
+                  },
+                  "frequency": {
+                    "type": "string",
+                    "enum": ["daily", "monthly"]
+                  },
+                  "day": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 31
+                  },
+                  "time": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["amount"],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "budget_schedules",
+        "description": "List recurring credit schedules and their IDs.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": []
+      }
+    },
+    "/api/settle": {
+      "post": {
+        "operationId": "budget_settle",
+        "description": "Requires manage scope. Explicitly settle a day early; automatic settlement already runs on the server. Safe to retry with the same request_id.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful result. Monetary output is integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Insufficient scope"
+          },
+          "409": {
+            "description": "Idempotency or state conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
