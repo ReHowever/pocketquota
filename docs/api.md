@@ -2,6 +2,8 @@
 
 GET `/openapi.json` 返回实时 OpenAPI 3.1 文档（Agent 接口）。API 返回金额为整数分，写入金额使用十进制字符串。请求最大 64 KiB。
 
+网页账号与 Agent 专用令牌共享同一用户身份；不同用户的请求由服务器自动选择隔离账本，不能通过参数跨账号访问。
+
 所有账本接口须 `Authorization: Bearer <专用令牌>`。每次写操作附 `Idempotency-Key`（8–128 位字母、数字、点、下划线、冒号或连字符）。同一次用户意图的重试使用同一个键；新意图使用新键。不得通过 URL 传密钥。
 
 | 方法 | 路径 | 用途 |
@@ -44,3 +46,7 @@ GET `/openapi.json` 返回实时 OpenAPI 3.1 文档（Agent 接口）。API 返�
 读取 `/api/dashboard` 得到 `settings.revision`，修改规则时原样提供；过期版本返回 409，避免多个 Agent 互相覆盖。默认令牌只读，写入需 read/write；管理需 read/write/manage。只有所有者能创建或撤销令牌。
 
 403 表示来源 / 权限错误；409 为幂等或状态冲突；400 为参数校验失败。失败时不应换幂等键盲目重发。网页使用 Cookie + Origin 校验 + CSRF，不使用 Agent 令牌。
+
+## 网页账号
+
+`POST /api/login` 使用 username / password（同源），返回 HttpOnly 会话。`GET /api/session` 返回当前用户名。`POST /api/password` 需要当前密码和新密码；变更后其他会话与全部 Agent 令牌失效。站点管理员可使用 `/api/users` 新建用户，返回一次随机初始密码；`/api/users/reset` 重置密码，`/api/users/status` 启停账号。普通用户与其 Agent 不能使用站点管理接口。

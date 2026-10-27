@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "PocketQuota Agent API",
-    "version": "0.1.0",
-    "description": "Personal budget journal. No bank transactions. One book per deployment. Read/write scoped tokens."
+    "version": "0.2.0",
+    "description": "Personal budget journal. No bank transactions. Isolated user books; web and agent tokens share the same account. Scoped read/write/manage access."
   },
   "servers": [
     {
@@ -164,7 +164,11 @@
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "enum": ["expense", "income", "transfer"]
+                    "enum": [
+                      "expense",
+                      "income",
+                      "transfer"
+                    ]
                   },
                   "amount": {
                     "type": "string",
@@ -173,11 +177,19 @@
                   },
                   "pool": {
                     "type": "string",
-                    "enum": ["daily", "flex", "reserve"]
+                    "enum": [
+                      "daily",
+                      "flex",
+                      "reserve"
+                    ]
                   },
                   "to_pool": {
                     "type": "string",
-                    "enum": ["daily", "flex", "reserve"]
+                    "enum": [
+                      "daily",
+                      "flex",
+                      "reserve"
+                    ]
                   },
                   "date": {
                     "type": "string"
@@ -189,7 +201,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["amount"],
+                "required": [
+                  "amount"
+                ],
                 "additionalProperties": false
               }
             }
@@ -254,7 +268,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["id", "reason"],
+                "required": [
+                  "id",
+                  "reason"
+                ],
                 "additionalProperties": false
               }
             }
@@ -371,14 +388,21 @@
                         "type": "string"
                       }
                     },
-                    "required": ["daily", "flex", "reserve"],
+                    "required": [
+                      "daily",
+                      "flex",
+                      "reserve"
+                    ],
                     "additionalProperties": false
                   },
                   "note": {
                     "type": "string"
                   }
                 },
-                "required": ["period", "actual"],
+                "required": [
+                  "period",
+                  "actual"
+                ],
                 "additionalProperties": false
               }
             }
@@ -474,7 +498,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["id"],
+                "required": [
+                  "id"
+                ],
                 "additionalProperties": false
               }
             }
@@ -561,7 +587,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["revision"],
+                "required": [
+                  "revision"
+                ],
                 "additionalProperties": false
               }
             }
@@ -621,7 +649,11 @@
                 "properties": {
                   "pool": {
                     "type": "string",
-                    "enum": ["daily", "flex", "reserve"]
+                    "enum": [
+                      "daily",
+                      "flex",
+                      "reserve"
+                    ]
                   },
                   "balance": {
                     "type": "string"
@@ -630,7 +662,11 @@
                     "type": "string"
                   }
                 },
-                "required": ["pool", "balance", "reason"],
+                "required": [
+                  "pool",
+                  "balance",
+                  "reason"
+                ],
                 "additionalProperties": false
               }
             }
@@ -701,11 +737,18 @@
                   },
                   "pool": {
                     "type": "string",
-                    "enum": ["daily", "flex", "reserve"]
+                    "enum": [
+                      "daily",
+                      "flex",
+                      "reserve"
+                    ]
                   },
                   "frequency": {
                     "type": "string",
-                    "enum": ["daily", "monthly"]
+                    "enum": [
+                      "daily",
+                      "monthly"
+                    ]
                   },
                   "day": {
                     "type": "integer",
@@ -719,7 +762,9 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["amount"],
+                "required": [
+                  "amount"
+                ],
                 "additionalProperties": false
               }
             }

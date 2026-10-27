@@ -10,7 +10,7 @@
 - [Claude Code / Desktop、Cursor JSON](../integrations/mcp.json)：`mcpServers`，将其合并到客户端个人配置，替换占位值；[Claude Code 官方文档](https://code.claude.com/docs/en/mcp)、[Cursor 官方文档](https://docs.cursor.com/context/model-context-protocol)。
 - [VS Code JSON](../integrations/vscode.mcp.json)：使用密码型输入变量；[官方说明](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)。
 - [Gemini CLI JSON](../integrations/gemini.settings.json)：环境变量引用；[官方说明](https://geminicli.com/docs/tools/mcp-server/)。
-- Hermes / 其他框架：把相同的命令、参数、环境变量加入其原生 MCP 配置；不共享生产管理员口令。
+- Hermes / 其他框架：把相同的命令、参数、环境变量加入其原生 MCP 配置；网页登录与 Agent 必须属于同一用户；在该用户登录后的 Agent 页创建令牌。令牌不会新建另一份账本，也不要把网页登录密码交给 Agent。
 
 模板是接入示例，不是对你的客户端配置文件的覆盖文件。不要把个人令牌写入项目共享配置。
 

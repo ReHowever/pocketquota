@@ -27,7 +27,7 @@ def specification():
         else:
             operation['parameters']=[{'name':k,'in':'query','required':k in schema['required'],'schema':v} for k,v in schema['properties'].items()]
         paths.setdefault(path,{})[method]=operation
-    return {'openapi':'3.1.0','info':{'title':'PocketQuota Agent API','version':'0.1.0',
-            'description':'Personal budget journal. No bank transactions. One book per deployment. Read/write scoped tokens.'},
+    return {'openapi':'3.1.0','info':{'title':'PocketQuota Agent API','version':'0.2.0',
+            'description':'Personal budget journal. No bank transactions. Isolated user books; web and agent tokens share the same account. Scoped read/write/manage access.'},
             'servers':[{'url':'https://budget.example.com','description':'Replace with your own instance'}],
             'components':{'securitySchemes':{'bearerAuth':{'type':'http','scheme':'bearer'}}},'paths':paths}

@@ -153,10 +153,23 @@ function footer(label = "保存") {
 async function login() {
   clearInterval(refreshTimer);
   clearInterval(countTimer);
+  Object.assign(state, {
+    page: "home",
+    d: null,
+    entries: [],
+    reviews: [],
+    tokens: [],
+    users: [],
+    notifications: [],
+    rules: [],
+    offset: 0,
+    start: "",
+    end: "",
+  });
   document.body.classList.remove("bankrupt");
   const info = await api("/api/info");
   $("#app").innerHTML =
-    `<main class="login">${brand}<div class="eyebrow">YOUR LIFE, WITHIN LIMITS</div><h1>给生活，一个舒服的额度。</h1><p>日常有边界，灵活有余地。<br>像管理 Agent 一样管理自己的消费习惯。</p><form id="login-form">${field("管理员登录口令", "token", "", "password", "口令位于部署实例的数据目录 admin.token；不会保存在浏览器存储中。", 'required autocomplete="current-password"')}<div class="form-error" role="alert"></div><button class="primary" type="submit">进入我的账本 ${icon("arrow")}</button></form>${info.demo ? '<button id="demo-login" class="secondary">试用演示账本 · 全部为虚构数据</button>' : ""}<p class="tagline">自托管 · 整数金额 · Agent 原生接口</p></main>`;
+    `<main class="login">${brand}<h1>登录</h1><form id="login-form">${field("账号", "username", "admin", "text", "", 'required autocomplete="username"')}${field("密码", "password", "", "password", "", 'required autocomplete="current-password"')}<div class="form-error" role="alert"></div><button class="primary" type="submit">进入我的账本 ${icon("arrow")}</button></form>${info.demo ? '<button id="demo-login" class="secondary">试用演示账本 · 全部为虚构数据</button>' : ""}<p class="tagline"><a href="/guide.html" target="_blank" rel="noopener">使用指南 ↗</a></p></main>`;
   attachForm("#login-form", async (data) => {
     const result = await api("/api/login", data);
     state.csrf = result.csrf;
@@ -209,6 +222,8 @@ async function refresh(animate = true) {
     rules,
   });
   if (state.page === "agents") state.tokens = await api("/api/tokens");
+  if (state.page === "account" && state.session.site_admin)
+    state.users = await api("/api/users");
   render();
   const total = Object.values(state.d.balances).reduce((a, b) => a + b, 0);
   if (animate && prior && oldTotal !== null && total !== oldTotal)
@@ -424,13 +439,14 @@ const navItems = [
   ["review", "对账中心"],
   ["rules", "预算与规则"],
   ["agents", "Agent 接入"],
+  ["account", "账号"],
 ];
 function render() {
   clearInterval(countTimer);
   const d = state.d;
   document.body.classList.toggle("bankrupt", d.bankrupt);
   $("#app").innerHTML =
-    `<div class="shell"><aside class="sidebar">${brand}<div class="nav-label">PERSONAL CONSOLE</div><nav class="nav" aria-label="主导航">${navItems.map(([id, label]) => `<button data-nav="${id}" class="${id === state.page ? "active" : ""}" ${id === state.page ? 'aria-current="page"' : ""}>${icon(id)}${label}</button>`).join("")}</nav><div class="side-foot"><span>自托管 · v0.1.0</span><span>◉</span></div></aside><main class="workspace"><header class="topbar"><div><span class="crumb">我的工作区</span> / ${esc(d.settings.name)}</div><div class="top-actions"><span class="hide-mobile">${esc(d.today)} · ${esc(d.settings.timezone)}</span><span><i class="status-dot"></i>${state.session.demo ? "演示数据" : "私人账本"}</span><a class="guide-link" href="/guide.html" target="_blank" rel="noopener">指南 ↗</a><button class="appearance-button" id="appearance" title="主题、配色与额度条">◐ <span>外观</span></button><button class="ghost" id="refresh" title="刷新">↻</button><button class="avatar" id="logout" aria-label="退出登录">P</button></div></header><div id="page">${{ home: home, ledger: ledger, review: review, rules: rules, agents: agents }[state.page]()}</div></main></div>`;
+    `<div class="shell"><aside class="sidebar">${brand}<div class="nav-label">PERSONAL CONSOLE</div><nav class="nav" aria-label="主导航">${navItems.map(([id, label]) => `<button data-nav="${id}" class="${id === state.page ? "active" : ""}" ${id === state.page ? 'aria-current="page"' : ""}>${icon(id)}${label}</button>`).join("")}</nav><div class="side-foot"><span>自托管 · v0.2.0</span><span>◉</span></div></aside><main class="workspace"><header class="topbar"><div><span class="crumb">我的工作区</span> / ${esc(d.settings.name)}</div><div class="top-actions"><span class="hide-mobile">${esc(d.today)} · ${esc(d.settings.timezone)}</span><span><i class="status-dot"></i>${state.session.demo ? "演示数据" : "私人账本"}</span><a class="guide-link" href="/guide.html" target="_blank" rel="noopener">指南 ↗</a><button class="appearance-button" id="appearance" title="主题、配色与额度条">◐ <span>外观</span></button><button class="ghost" id="refresh" title="刷新">↻</button><button class="avatar" id="account-avatar" aria-label="账号设置">${esc((state.session.username || "P").slice(0, 1).toUpperCase())}</button></div></header><div id="page">${{ home: home, ledger: ledger, review: review, rules: rules, agents: agents, account: account }[state.page]()}</div></main></div>`;
   document.querySelectorAll("[data-nav]").forEach(
     (b) =>
       (b.onclick = async () => {
@@ -444,14 +460,15 @@ function render() {
     refresh()
       .then(() => toast("已刷新"))
       .catch((e) => toast(e.message));
-  $("#logout").onclick = async () => {
-    await api("/api/logout", {});
-    await login();
+  $("#account-avatar").onclick = async () => {
+    state.page = "account";
+    await refresh();
   };
   document
     .querySelectorAll("[data-add]")
     .forEach((b) => (b.onclick = () => entryModal(b.dataset.add)));
   bindPage();
+  bindAccount();
   updateCountdown();
   countTimer = setInterval(updateCountdown, 1000);
 }
@@ -543,7 +560,7 @@ function rules() {
     )}</section></div><section class="panel section-gap"><div class="panel-heading"><h2>自动入账计划</h2><button class="secondary" id="new-schedule">＋ 添加计划</button></div>${state.schedules.length ? state.schedules.map((s) => `<div class="schedule-item"><div><strong>${esc(s.name)} <span class="badge">${s.enabled ? "已启用" : "已暂停"}</span></strong><small>${s.frequency === "daily" ? "每天" : "每月 " + s.day + " 日"} ${esc(s.time)} → ${pools[s.pool]} · ${yuan(s.amount)}${s.day > 28 ? "（短月在月末）" : ""}</small></div><button class="ghost" data-schedule="${s.id}">编辑 →</button></div>`).join("") : '<div class="empty">暂无计划</div>'}</section><section class="panel section-gap"><h2>额度规则历史</h2><div class="table-wrap"><table><thead><tr><th>生效日</th><th>每日额度</th><th>结余结转</th></tr></thead><tbody>${state.rules.map((r) => `<tr><td>${esc(r.effective)}</td><td>${yuan(r.data.daily_limit)}</td><td>${r.data.carry_over ? "开启" : "关闭"}</td></tr>`).join("")}</tbody></table></div></section>`;
 }
 function agents() {
-  return `${title("AGENT CONNECTIONS", "Agent", "同一套账本，多个入口。只读查询、对话记账、通知领取，各有边界。", '<button class="primary" id="new-agent">' + icon("plus") + " 连接 Agent</button>")}<div class="two-cols"><section class="panel"><div class="panel-heading"><h2>访问凭据</h2><span class="pill">可随时撤销</span></div>${state.tokens.length ? state.tokens.map((t) => `<div class="schedule-item"><div><strong>${esc(t.name)}</strong><small>${JSON.parse(t.scopes).includes("manage") ? "预算管理" : JSON.parse(t.scopes).includes("write") ? "查询 + 记账" : "仅查询"} · ${t.revoked ? "已撤销" : "有效"}</small></div>${!t.revoked ? `<button class="ghost warning" data-revoke="${t.id}">撤销</button>` : ""}</div>`).join("") : '<div class="empty">暂无连接</div>'}</section><section class="panel"><div class="panel-heading"><h2>额度通知</h2><span class="pill">${state.notifications.length} 条待处理</span></div>${state.notifications.map((n) => `<div class="inline-callout red-callout"><strong>赤字 · 已破产</strong><br>缺口 ${yuan(n.data.deficit)} · ${esc(n.created_at.slice(0, 10))}<br>待投递</div>`).join("") || '<div class="inline-callout">暂无通知</div>'}</section></div><section class="panel section-gap"><div class="panel-heading"><h2>接入方式</h2><a class="guide-link" href="/guide.html#agents" target="_blank" rel="noopener">指南 ↗</a></div><div class="connector-grid"><a href="/guide.html#agents" target="_blank" rel="noopener">MCP <span>↗</span></a><a href="/openapi.json" target="_blank" rel="noopener">REST <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Codex <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Claude <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Cursor <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Gemini <span>↗</span></a></div></section>`;
+  return `${title("AGENT CONNECTIONS", "Agent", "同一套账本，多个入口。只读查询、对话记账、通知领取，各有边界。", '<button class="primary" id="new-agent">' + icon("plus") + " 连接 Agent</button>")}<div class="two-cols"><section class="panel"><div class="panel-heading"><h2>访问凭据</h2><span class="pill">${esc(state.session.username)}</span></div>${state.tokens.length ? state.tokens.map((t) => `<div class="schedule-item"><div><strong>${esc(t.name)}</strong><small>${JSON.parse(t.scopes).includes("manage") ? "预算管理" : JSON.parse(t.scopes).includes("write") ? "查询 + 记账" : "仅查询"} · ${t.revoked ? "已撤销" : "有效"}</small></div>${!t.revoked ? `<button class="ghost warning" data-revoke="${t.id}">撤销</button>` : ""}</div>`).join("") : '<div class="empty">暂无连接</div>'}</section><section class="panel"><div class="panel-heading"><h2>额度通知</h2><span class="pill">${state.notifications.length} 条待处理</span></div>${state.notifications.map((n) => `<div class="inline-callout red-callout"><strong>赤字 · 已破产</strong><br>缺口 ${yuan(n.data.deficit)} · ${esc(n.created_at.slice(0, 10))}<br>待投递</div>`).join("") || '<div class="inline-callout">暂无通知</div>'}</section></div><section class="panel section-gap"><div class="panel-heading"><h2>接入方式</h2><a class="guide-link" href="/guide.html#agents" target="_blank" rel="noopener">指南 ↗</a></div><div class="connector-grid"><a href="/guide.html#agents" target="_blank" rel="noopener">MCP <span>↗</span></a><a href="/openapi.json" target="_blank" rel="noopener">REST <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Codex <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Claude <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Cursor <span>↗</span></a><a href="/guide.html#agents" target="_blank" rel="noopener">Gemini <span>↗</span></a></div></section>`;
 }
 function updateCountdown() {
   const el = $("#countdown");
@@ -807,3 +824,85 @@ start().catch(() =>
     $("#app").textContent = "暂时无法连接服务，请刷新重试。";
   }),
 );
+
+function account() {
+  return `${title("", "账号", "", '<button class="secondary" id="sign-out">退出登录</button>')}<section class="panel"><div class="panel-heading"><h2>${esc(state.session.username || "admin")}</h2><button class="secondary" id="change-password">修改密码</button></div><span class="badge">${state.session.site_admin ? "站点管理员" : "个人账号"}</span></section>${state.session.site_admin ? `<section class="panel section-gap"><div class="panel-heading"><h2>用户</h2><button class="primary" id="new-user">＋ 新建账号</button></div>${(state.users || []).map((u) => `<div class="schedule-item"><div><strong>${esc(u.username)}</strong><small>${u.active ? "正常" : "已停用"}</small></div>${u.id !== "owner" ? `<div><button class="ghost" data-reset-user="${u.id}">重置密码</button><button class="ghost" data-toggle-user="${u.id}" data-active="${u.active}">${u.active ? "停用" : "启用"}</button></div>` : ""}</div>`).join("")}</section>` : ""}`;
+}
+function showCredentials(data) {
+  modal(
+    "初始登录信息",
+    `<div class="credentials"><label>账号</label><strong>${esc(data.username)}</strong><label>随机密码 · 仅显示一次</label><div class="token-secret">${esc(data.password)}</div></div><button class="primary" id="copy-credentials">复制登录信息</button>`,
+  );
+  $("#copy-credentials").onclick = () =>
+    navigator.clipboard
+      .writeText("账号：" + data.username + "\n密码：" + data.password)
+      .then(() => toast("已复制"))
+      .catch(() => toast("请手动复制"));
+}
+function bindAccount() {
+  if ($("#sign-out"))
+    $("#sign-out").onclick = async () => {
+      await api("/api/logout", {});
+      await login();
+    };
+  if ($("#change-password"))
+    $("#change-password").onclick = () => {
+      modal(
+        "修改密码",
+        `<form id="password-form"><div class="form-grid">${field("当前密码", "old_password", "", "password", "", 'required autocomplete="current-password"')}${field("新密码", "new_password", "", "password", "", 'required minlength="12" maxlength="256" autocomplete="new-password"')}${field("确认新密码", "confirm", "", "password", "", 'required minlength="12" autocomplete="new-password"')}</div><p class="subtle">修改后，其他登录及 Agent 令牌将失效。</p>${footer("更新密码")}</form>`,
+      );
+      attachForm("#password-form", async (data) => {
+        if (data.new_password !== data.confirm)
+          throw new Error("两次新密码不一致");
+        delete data.confirm;
+        const r = await api("/api/password", data);
+        state.csrf = r.csrf;
+        $("#dialog").close();
+        await start();
+        toast("密码已更新");
+      });
+    };
+  if ($("#new-user"))
+    $("#new-user").onclick = () => {
+      modal(
+        "新建账号",
+        `<form id="user-form">${field("账号名", "username", "", "text", "", 'required minlength="3" maxlength="40" autocomplete="off"')}${footer("创建并生成密码")}</form>`,
+      );
+      attachForm("#user-form", async (data) => {
+        const r = await api("/api/users", data);
+        $("#dialog").close();
+        await refresh();
+        showCredentials(r);
+      });
+    };
+  document.querySelectorAll("[data-reset-user]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        modal(
+          "重置密码",
+          `<form id="reset-user-form"><p class="subtle">生成新密码，并撤销该用户的所有会话和 Agent 令牌。</p>${footer("确认重置")}</form>`,
+        );
+        attachForm("#reset-user-form", async () => {
+          const r = await api("/api/users/reset", { id: b.dataset.resetUser });
+          $("#dialog").close();
+          await refresh();
+          showCredentials(r);
+        });
+      }),
+  );
+  document.querySelectorAll("[data-toggle-user]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const active = b.dataset.active !== "1";
+        modal(
+          active ? "启用账号" : "停用账号",
+          `<form id="toggle-user-form">${footer("确认")}</form>`,
+        );
+        attachForm("#toggle-user-form", async () => {
+          await api("/api/users/status", { id: b.dataset.toggleUser, active });
+          $("#dialog").close();
+          await refresh();
+        });
+      }),
+  );
+}

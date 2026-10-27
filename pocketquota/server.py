@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .engine import Ledger, Problem, POOLS, pack, text, day
+from .accounts import Accounts
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -38,13 +39,20 @@ class App:
             fd = os.open(key, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             with os.fdopen(fd, 'w') as f:
                 f.write(secrets.token_urlsafe(36) + '\n')
-        self.owner_digest = digest(key.read_text().strip())
+        self.accounts = Accounts(self.data)
+        self.ledgers = {'owner':self.ledger}
+        # Migrate previously issued owner-book tokens without copying cleartext secrets.
+        with self.ledger.connect() as source, self.accounts.connect() as target:
+            for row in source.execute('SELECT * FROM tokens'):
+                target.execute('INSERT OR IGNORE INTO agent_tokens VALUES(?,?,?,?,?,?,?)',
+                    (row['id'],'owner',row['name'],row['digest'],row['scopes'],row['created_at'],row['revoked']))
         self.demo = demo
         self.origin = origin
         self.origins = {origin} if origin else {f'http://localhost:{port}', f'http://127.0.0.1:{port}'}
         self.hosts = {urlsplit(o).netloc for o in self.origins}
         self.sessions, self.attempts = {}, {}
         self.lock = threading.Lock()
+        self.password_slots = threading.BoundedSemaphore(2)
         self.stop = threading.Event()
         if demo:
             with self.ledger.connect() as db:
@@ -62,16 +70,30 @@ class App:
     def scheduler(self):
         while not self.stop.is_set():
             try:
-                self.ledger.tick()
+                for user in self.accounts.list():
+                    if user['active']:
+                        self.get_ledger(user['id']).tick()
             except Exception as e:
                 logging.error('Scheduler failed (%s); will retry in 30 seconds', type(e).__name__)
             self.stop.wait(30)
 
-    def session(self):
+    @property
+    def owner_digest(self):
+        return digest((self.data/'admin.token').read_text().strip())
+
+    def get_ledger(self,user_id):
+        with self.lock:
+            if user_id not in self.ledgers:
+                self.ledgers[user_id]=Ledger(self.data/'users'/user_id/'ledger.sqlite3')
+            return self.ledgers[user_id]
+
+    def session(self,user_id='owner'):
         token, csrf = secrets.token_urlsafe(36), secrets.token_urlsafe(24)
+        user=self.accounts.get(user_id)
         with self.lock:
             self.sessions = {k:v for k,v in self.sessions.items() if v['expires'] > time.time()}
-            self.sessions[digest(token)] = {'actor': 'web', 'admin': True, 'csrf': csrf, 'expires': time.time()+43200}
+            self.sessions[digest(token)] = {'actor':'web','admin':True,'site_admin':user_id=='owner',
+                'user_id':user_id,'username':user['username'],'version':user['version'],'csrf':csrf,'expires':time.time()+43200}
         return token, csrf
 
 
@@ -126,14 +148,14 @@ class Handler(BaseHTTPRequestHandler):
         if bearer.startswith('Bearer '):
             value = digest(bearer[7:])
             if hmac.compare_digest(value, self.app.owner_digest):
-                return {'actor': 'owner-api', 'admin': True}
-            with self.app.ledger.connect() as db:
-                token = db.execute('SELECT * FROM tokens WHERE digest=? AND revoked=0', (value,)).fetchone()
+                return {'actor':'owner-api','admin':True,'site_admin':True,'user_id':'owner','username':'admin'}
+            token = self.app.accounts.authenticate_token(value)
             if token:
                 scopes = json.loads(token['scopes'])
                 if write and 'write' not in scopes:
                     raise Problem('此 Agent 仅有只读权限', 403)
-                return {'actor': 'agent:' + token['id'], 'admin': False, 'manage': 'manage' in scopes}
+                return {'actor':'agent:'+token['id'],'admin':False,'manage':'manage' in scopes,
+                        'user_id':token['user_id'],'username':token['username'],'site_admin':False}
             raise Problem('令牌无效或已撤销', 401)
         cookies = SimpleCookie()
         try:
@@ -145,6 +167,9 @@ class Handler(BaseHTTPRequestHandler):
             session = self.app.sessions.get(digest(value.value)) if value else None
         if not session or session['expires'] < time.time():
             raise Problem('请先登录', 401)
+        user=self.app.accounts.get(session['user_id'])
+        if not user or not user['active'] or user['version']!=session['version']:
+            raise Problem('账号已变更，请重新登录',401)
         if write:
             if self.headers.get('Origin') not in self.app.origins:
                 raise Problem('请求来源不匹配', 403)
@@ -182,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
                 kind = {'html':'text/html','js':'application/javascript','css':'text/css','svg':'image/svg+xml'}[name.split('.')[-1]]
                 return self.respond(200, (STATIC/name).read_bytes(), kind+'; charset=utf-8')
             if not write and path == '/api/health':
-                return self.respond(200, {'ok': True, 'version': '0.1.0'})
+                return self.respond(200, {'ok': True, 'version': '0.2.0'})
             if not write and path == '/openapi.json':
                 from .api_spec import specification
                 return self.respond(200,specification())
@@ -199,18 +224,29 @@ class Handler(BaseHTTPRequestHandler):
                     if len(recent) >= 10:
                         raise Problem('尝试过多，请五分钟后再试', 429)
                     recent.append(time.time())
-                valid = self.app.demo if path.endswith('demo-session') else hmac.compare_digest(digest(text(data.get('token',''),200)), self.app.owner_digest)
-                if not valid:
-                    raise Problem('登录口令无效', 401)
-                token, csrf = self.app.session()
+                if path.endswith('demo-session'):
+                    user=self.app.accounts.get('owner') if self.app.demo else None
+                else:
+                    if not self.app.password_slots.acquire(blocking=False):
+                        raise Problem('登录繁忙，请稍后重试',429)
+                    try:user=self.app.accounts.verify(data.get('username'),data.get('password'))
+                    finally:self.app.password_slots.release()
+                if not user:
+                    raise Problem('账号或密码错误', 401)
+                token, csrf = self.app.session(user['id'])
                 return self.respond(200, {'csrf': csrf}, extra={'Set-Cookie': self.cookie(token)})
             auth = self.authenticate(write)
-            ledger = self.app.ledger
+            ledger = self.app.get_ledger(auth['user_id'])
             if not write:
                 if path == '/api/session':
-                    return self.respond(200, {'csrf':auth.get('csrf'), 'admin':auth['admin'], 'demo':self.app.demo})
+                    return self.respond(200, {'csrf':auth.get('csrf'),'admin':auth['admin'],'site_admin':auth.get('site_admin',False),
+                        'username':auth.get('username'),'demo':self.app.demo})
+                if path == '/api/users' and auth.get('site_admin'):
+                    return self.respond(200,self.app.accounts.list())
                 if path == '/api/dashboard':
-                    return self.respond(200, ledger.dashboard())
+                    result=ledger.dashboard()
+                    result['account']={'username':auth.get('username'),'id':auth['user_id']}
+                    return self.respond(200,result)
                 if path == '/api/entries':
                     return self.respond(200, ledger.entries(query.get('start',[None])[0], query.get('end',[None])[0],
                         int(query.get('limit',['100'])[0]), int(query.get('offset',['0'])[0])))
@@ -254,9 +290,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(200, ('\ufeff'+buf.getvalue()).encode(), 'text/csv; charset=utf-8',
                                         {'Content-Disposition':'attachment; filename="pocketquota-journal.csv"'})
                 if path == '/api/tokens' and auth['admin']:
-                    with ledger.connect() as db:
-                        values = [dict(r) for r in db.execute('SELECT id,name,scopes,created_at,revoked FROM tokens ORDER BY created_at DESC')]
-                    return self.respond(200, values)
+                    return self.respond(200,self.app.accounts.tokens(auth['user_id']))
                 if path == '/api/audit' and auth['admin']:
                     with ledger.connect() as db:
                         return self.respond(200, [dict(r) for r in db.execute('SELECT * FROM audit ORDER BY id DESC LIMIT 100')])
@@ -265,6 +299,36 @@ class Handler(BaseHTTPRequestHandler):
                         return self.respond(200, [{**dict(r),'data':json.loads(r['data'])} for r in db.execute('SELECT * FROM rules ORDER BY effective DESC,id DESC')])
                 raise Problem('接口不存在或无权限', 404)
             data = self.body()
+            if path in ('/api/users','/api/users/reset','/api/users/status'):
+                if not auth.get('site_admin'):
+                    raise Problem('仅站点管理员可以管理账号',403)
+                if self.app.demo:
+                    raise Problem('演示模式不创建或修改真实账号',403)
+                if path=='/api/users':
+                    result=self.app.accounts.create(data.get('username'))
+                    self.app.get_ledger(result['id'])
+                elif path.endswith('/reset'):
+                    target=self.app.accounts.get(data.get('id'))
+                    if not target:raise Problem('账号不存在',404)
+                    result={'username':target['username'],'password':self.app.accounts.reset(target['id'])}
+                else:result=self.app.accounts.set_active(data.get('id'),data.get('active'))
+                with ledger.transaction() as db:
+                    ledger.audit(db,auth['actor'],path,{'user_id':result.get('id',data.get('id'))})
+                return self.respond(200,result)
+            if path=='/api/password':
+                if not auth['admin'] or 'csrf' not in auth:
+                    raise Problem('请通过网页登录后修改密码',403)
+                if self.app.demo:raise Problem('演示模式不能修改密码',403)
+                if not isinstance(data.get('new_password'),str) or not 12<=len(data['new_password'])<=256:
+                    raise Problem('新密码须为 12–256 个字符')
+                if not self.app.password_slots.acquire(blocking=False):raise Problem('请稍后重试',429)
+                try:
+                    verified=self.app.accounts.verify(auth['username'],data.get('old_password'))
+                    if not verified:raise Problem('当前密码不正确',403)
+                    self.app.accounts.reset(auth['user_id'],data.get('new_password'))
+                finally:self.app.password_slots.release()
+                token,csrf=self.app.session(auth['user_id'])
+                return self.respond(200,{'csrf':csrf},extra={'Set-Cookie':self.cookie(token)})
             if path == '/api/logout':
                 cookies=SimpleCookie(); cookies.load(self.headers.get('Cookie',''))
                 if cookies.get('pq_session'):
@@ -274,23 +338,15 @@ class Handler(BaseHTTPRequestHandler):
             if path in ('/api/tokens','/api/tokens/revoke'):
                 if not auth['admin']:
                     raise Problem('需要管理员权限',403)
-                with ledger.transaction() as db:
-                    if path.endswith('revoke'):
-                        db.execute('UPDATE tokens SET revoked=1 WHERE id=?',(data.get('id'),))
-                        ledger.audit(db, auth['actor'], 'token_revoke', {'id':data.get('id')})
-                        return self.respond(200, {'ok':True})
-                    name = text(data.get('name','Agent'),60)
-                    scopes = data.get('scopes',['read'])
-                    if scopes not in (['read'], ['read','write'], ['read','write','manage']):
-                        raise Problem('权限须为 read、read/write 或 read/write/manage')
-                    if self.app.demo:
-                        raise Problem('演示模式不签发持久 Agent 令牌，请部署独立账本',403)
-                    token = 'pq_'+secrets.token_urlsafe(32)
-                    identifier = secrets.token_hex(16)
-                    db.execute('INSERT INTO tokens(id,name,digest,scopes,created_at) VALUES(?,?,?,?,?)',
-                               (identifier,name,digest(token),pack(scopes),ledger.stamp()))
-                    ledger.audit(db, auth['actor'], 'token_create', {'id':identifier,'name':name,'scopes':scopes})
-                return self.respond(201, {'id':identifier,'token':token})
+                if self.app.demo:
+                    raise Problem('演示模式不签发持久 Agent 令牌，请部署独立账本',403)
+                if path.endswith('revoke'):
+                    self.app.accounts.revoke(auth['user_id'],data.get('id'))
+                    with ledger.transaction() as db:ledger.audit(db,auth['actor'],'token_revoke',{'id':data.get('id')})
+                    return self.respond(200,{'ok':True})
+                result=self.app.accounts.create_token(auth['user_id'],data.get('name','Agent'),data.get('scopes',['read']))
+                with ledger.transaction() as db:ledger.audit(db,auth['actor'],'token_create',{'id':result['id']})
+                return self.respond(201,result)
             operations={'/api/setup':'setup','/api/entries':'entry','/api/reverse':'reverse',
                         '/api/settle':'settle','/api/settings':'settings','/api/adjust':'adjust',
                         '/api/schedules':'schedule','/api/reviews':'review','/api/notifications/ack':'ack'}
@@ -325,7 +381,7 @@ def main():
     server=ThreadingHTTPServer((args.host,args.port),Handler)
     server.app=app
     thread=threading.Thread(target=app.scheduler,daemon=True);thread.start()
-    print(f'PocketQuota serving on port {args.port}. Owner login token is in {args.data}/admin.token (keep private).',flush=True)
+    print(f'PocketQuota serving on port {args.port}. First-run admin credentials: {args.data}/initial-admin.json (private; removed after first login).',flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

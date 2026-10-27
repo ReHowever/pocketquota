@@ -10,6 +10,7 @@ PocketQuota 把日常池、灵活池、每日限额与自动结余划转做成�
 
 ## 能做什么
 
+- **用户与 Agent 同账号**：网页登录与专用 Agent 令牌绑定同一用户，共用账本与预算。不同用户的数据隔离。管理员新建账号后返回随机强密码。
 - **日常池 / 灵活池 / 保底池**：逐笔选择，默认日常；每日额度或日常余额不足时自动由灵活池补足。保底池不自动动用。
 - **真实额度条**：黑白主题、三套光谱、线形或圆环；支出粒子消散、入账光带汇入。支持减少动态效果。
 - **赤字状态**：日常与灵活合计耗尽时，整页变红、显示“赤字 · 已破产”，生成可由 Agent 投递的去重通知事件。
@@ -37,10 +38,10 @@ python3 -m pocketquota.server --demo --data .demo-data
 
 ```sh
 python3 -m pocketquota.server --data .data
-cat .data/admin.token
+cat .data/initial-admin.json
 ```
 
-将本机显示的口令填入登录页。登录后初始化资金池。口令文件只允许当前系统用户读取；网页不将口令存入 localStorage。不要把该文件发送给任何人。
+默认账号为 `admin`，密码在首次启动时随机生成（26 位），从初始信息文件读取。首次成功登录后，初始文件自动移除；数据库只保存随机盐和 scrypt 哈希。登录后初始化资金池。账号页可新建用户、一次性复制随机初始密码、停用或重置账号。每个用户独立初始化自己的账本。
 
 也可以安装 CLI / MCP：
 
@@ -54,16 +55,16 @@ python3 -m venv .venv
 
 ```sh
 docker compose up -d --build
-docker compose exec pocketquota cat /data/admin.token
+docker compose exec pocketquota cat /data/initial-admin.json
 ```
 
 默认仅映射宿主机回环地址，打开 **http://localhost:18790/**。公网使用 TLS 反向代理，设置 `POCKETQUOTA_ORIGIN=https://budget.example.com` 为你的精确站点来源，并让代理保留原始 Host。不要直接公开 Python HTTP 端口；代理应配置请求超时、并发和速率限制。
 
-后台调度随服务启动，每 30 秒检查到期项目；不需要 LLM 常驻。恢复后补跑离线期间的到期规则。一个数据库只运行一个服务实例（允许多个 Agent 并发调用）；单用户自托管，不是多租户 SaaS。
+后台调度随服务启动，每 30 秒检查到期项目；不需要 LLM 常驻。恢复后补跑离线期间的到期规则。一个数据目录只运行一个服务实例。支持多个用户及其 Agent，使用独立账本数据库；账号数据库集中管理身份与令牌归属。站点管理员负责创建用户，默认不开放匿名注册。
 
 ## 连接 Agent
 
-1. 在 WebUI 的 Agent 页签发专用令牌，默认只读。
+1. 使用自己的账号登录，在 Agent 页签发专用令牌，默认只读；令牌始终绑定当前账号。
 2. 在 Agent 运行环境安装本项目，设置 `POCKETQUOTA_URL` 和 `POCKETQUOTA_TOKEN`。
 3. 配置标准 MCP stdio：`python3 -m pocketquota.mcp`。
 
@@ -109,12 +110,12 @@ python3 scripts/privacy_check.py
 python3 -c "import sqlite3; s=sqlite3.connect('.data/ledger.sqlite3'); d=sqlite3.connect('backup.sqlite3'); s.backup(d); d.close(); s.close()"
 ```
 
-备份包含私人账目和哈希凭据，必须放在安全位置；同时私下备份 `admin.token`。恢复前停服务，恢复数据库，再启动。不要只复制运行中的主库而忽略 WAL 文件。更换 `admin.token` 后须重启服务，现有浏览器会话也会失效；Agent 令牌单独撤销。
+备份包含私人账目和哈希凭据，必须放在安全位置；多账号实例还需要备份 `accounts.sqlite3`、`users/` 内的各用户账本及本机管理 API 的 `admin.token`。恢复前停服务，恢复数据库，再启动。不要只复制运行中的主库而忽略 WAL 文件。网页密码与 Agent 令牌分开管理；重置密码会撤销该账号全部会话与 Agent 令牌。默认管理员密码丢失时可在服务器本地运行 `python3 -m pocketquota.accounts reset-admin --data .data`，返回一个新的随机密码。
 
 ## 设计参考与边界
 
 [Actual Budget](https://github.com/actualbudget/actual) 的信封预算与 [API](https://actualbudget.org/docs/api/)、[Firefly III](https://github.com/firefly-iii/firefly-iii) 的预算与审计工作流是产品调研参考；本仓库是独立实现，未复制其源码、前端或商标。详见 [设计说明](docs/design.md)。
 
-PocketQuota v0.1 是个人自托管版本：尚无银行同步、多币种换汇、多用户隔离、第三方安全审计或历史账本自动迁移。仅提供预算和记账，不执行支付或银行转账。
+PocketQuota v0.2 是个人自托管版本：尚无银行同步、多币种换汇、开放注册、第三方安全审计或历史账本自动迁移。账号隔离是应用级隔离，不对服务器管理员隐藏数据。仅提供预算和记账，不执行支付或银行转账。
 
 MIT License. 独立项目，与 OpenAI、Anthropic 或其他 Agent 厂商无隶属关系。

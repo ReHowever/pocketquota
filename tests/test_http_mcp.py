@@ -24,12 +24,16 @@ class HTTPTest(unittest.TestCase):
         cls.app=App(cls.tmp.name,cls.port)
         cls.server.app=cls.app
         cls.owner=(Path(cls.tmp.name)/'admin.token').read_text().strip()
+        cls.password=json.loads((Path(cls.tmp.name)/'initial-admin.json').read_text())['password']
         cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True);cls.thread.start()
         cls.request('/api/setup',{'daily':'100.00','flex':'50.00','reserve':'100.00'},token=cls.owner)
 
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown();cls.server.server_close();cls.thread.join();cls.tmp.cleanup()
+
+    def setUp(self):
+        self.app.attempts.clear()
 
     @classmethod
     def request(cls,path,body=None,token=None,headers=None):
@@ -86,7 +90,7 @@ class HTTPTest(unittest.TestCase):
         self.assertNotIn(self.owner.encode(),html)
 
     def test_cookie_session_csrf_and_logout(self):
-        status,data,hs=self.request('/api/login',{'token':self.owner},headers={'Origin':self.base})
+        status,data,hs=self.request('/api/login',{'username':'admin','password':self.password},headers={'Origin':self.base})
         self.assertEqual(status,200)
         cookie=hs['Set-Cookie'].split(';')[0]
         self.assertIn('HttpOnly',hs['Set-Cookie'])
@@ -96,6 +100,80 @@ class HTTPTest(unittest.TestCase):
         self.assertEqual(self.request('/api/entries',{'amount':'1.00'},headers=valid)[0],200)
         self.assertEqual(self.request('/api/logout',{},headers=valid)[0],200)
         self.assertEqual(self.request('/api/dashboard',headers={'Cookie':cookie})[0],401)
+
+    def new_user(self):
+        name='u'+uuid.uuid4().hex[:12]
+        status,user,_=self.request('/api/users',{'username':name},self.owner)
+        self.assertEqual(status,200)
+        self.assertGreaterEqual(len(user['password']),26)
+        status,login,hs=self.request('/api/login',{'username':name,'password':user['password']},headers={'Origin':self.base})
+        self.assertEqual(status,200)
+        headers={'Origin':self.base,'Cookie':hs['Set-Cookie'].split(';')[0],'X-CSRF-Token':login['csrf']}
+        self.assertEqual(self.request('/api/setup',{'daily':'60.00','flex':'10.00'},headers=headers)[0],200)
+        return user,headers
+
+    def test_user_and_own_agent_share_book_other_users_do_not(self):
+        alice,ah=self.new_user();bob,bh=self.new_user()
+        _,agent,_=self.request('/api/tokens',{'name':'Alice agent','scopes':['read','write']},headers=ah)
+        status,result,_=self.request('/api/entries',{'amount':'3.25','note':'Alice only'},agent['token'])
+        self.assertEqual(status,200)
+        _,ad,_=self.request('/api/dashboard',headers=ah)
+        _,bd,_=self.request('/api/dashboard',headers=bh)
+        self.assertEqual(ad['spent'],325)
+        self.assertEqual(bd['spent'],0)
+        _,agent_view,_=self.request('/api/dashboard',token=agent['token'])
+        self.assertEqual(ad['account'],agent_view['account'])
+        self.assertNotEqual(ad['account'],bd['account'])
+        _,be,_=self.request('/api/entries',headers=bh)
+        self.assertNotIn(result['id'],[r['id'] for r in be['items']])
+        self.assertEqual(self.request('/api/reverse',{'id':result['id'],'reason':'cross-account'},headers=bh)[0],400)
+        self.assertEqual(self.request('/api/tokens/revoke',{'id':agent['id']},headers=bh)[0],404)
+        self.assertEqual(self.request('/api/users',{'username':'intruder'},headers=ah)[0],403)
+        self.assertEqual(self.request('/api/users',headers=ah)[0],404)
+
+    def test_user_notification_isolation_and_agent_ack(self):
+        alice,ah=self.new_user();bob,bh=self.new_user()
+        _,agent,_=self.request('/api/tokens',{'name':'Notifier','scopes':['read','write']},headers=ah)
+        self.request('/api/entries',{'amount':'80.00'},agent['token'])
+        _,events,_=self.request('/api/notifications',headers=ah)
+        _,other,_=self.request('/api/notifications',headers=bh)
+        self.assertEqual(len(events),1);self.assertEqual(other,[])
+        self.assertEqual(self.request('/api/notifications/ack',{'id':events[0]['id']},headers=bh)[0],404)
+        self.assertEqual(self.request('/api/notifications/ack',{'id':events[0]['id']},agent['token'])[0],200)
+        self.assertEqual(self.request('/api/notifications',headers=ah)[1],[])
+
+    def test_disable_and_password_reset_revoke_both_session_and_agent(self):
+        user,headers=self.new_user()
+        _,agent,_=self.request('/api/tokens',{'name':'Old agent','scopes':['read']},headers=headers)
+        status,reset,_=self.request('/api/users/reset',{'id':user['id']},self.owner)
+        self.assertEqual(status,200)
+        self.assertNotEqual(reset['password'],user['password'])
+        self.assertEqual(self.request('/api/dashboard',headers=headers)[0],401)
+        self.assertEqual(self.request('/api/dashboard',token=agent['token'])[0],401)
+        status,login,hs=self.request('/api/login',{'username':user['username'],'password':reset['password']},headers={'Origin':self.base})
+        self.assertEqual(status,200)
+        new_headers={'Cookie':hs['Set-Cookie'].split(';')[0],'Origin':self.base,'X-CSRF-Token':login['csrf']}
+        self.assertEqual(self.request('/api/users/status',{'id':user['id'],'active':False},self.owner)[0],200)
+        self.assertEqual(self.request('/api/dashboard',headers=new_headers)[0],401)
+
+    def test_password_storage_and_bootstrap_not_persistent_plaintext(self):
+        with self.app.accounts.connect() as db:
+            row=db.execute("SELECT salt,password_hash FROM users WHERE id='owner'").fetchone()
+        self.assertNotEqual(row['password_hash'],self.password)
+        self.assertEqual(len(row['salt']),32)
+        self.assertEqual(self.request('/api/login',{'username':'admin','password':self.password},headers={'Origin':self.base})[0],200)
+        self.assertFalse((Path(self.tmp.name)/'initial-admin.json').exists())
+        self.assertEqual(self.request('/api/login',{'token':self.owner},headers={'Origin':self.base})[0],401)
+
+    def test_missing_new_password_cannot_silently_reset(self):
+        user,headers=self.new_user()
+        self.assertEqual(self.request('/api/password',{'old_password':user['password']},headers=headers)[0],400)
+        self.assertEqual(self.request('/api/dashboard',headers=headers)[0],200)
+
+    def test_login_rate_limit(self):
+        for _ in range(10):
+            self.request('/api/login',{'username':'unknown','password':'incorrect password'},headers={'Origin':self.base})
+        self.assertEqual(self.request('/api/login',{'username':'admin','password':self.password},headers={'Origin':self.base})[0],429)
 
     def test_csv_formula_neutralized(self):
         self.request('/api/entries',{'amount':'1.00','note':'=1+1'},self.owner)
