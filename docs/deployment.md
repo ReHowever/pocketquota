@@ -10,7 +10,7 @@ cd pocketquota
 python3 -m pocketquota.server --demo --data .demo-data
 ```
 
-打开 **http://127.0.0.1:18790/**，点击“试用演示账本”。所有演示流水均为虚构。
+打开 [本机地址](http://127.0.0.1:18790/)，点击“试用演示账本”。所有演示流水均为虚构。
 
 正式账本使用另一目录，不要把演示数据库用于真实记账：
 
@@ -36,7 +36,7 @@ docker compose up -d --build
 docker compose exec pocketquota cat /data/initial-admin.json
 ```
 
-默认仅映射宿主机回环地址，打开 **http://localhost:18790/**。公网使用 TLS 反向代理，设置 `POCKETQUOTA_ORIGIN=https://budget.example.com` 为你的精确站点来源，并让代理保留原始 Host。不要直接公开 Python HTTP 端口；代理应配置请求超时、并发和速率限制。
+默认仅映射宿主机回环地址，打开 [本机地址](http://localhost:18790/)。公网使用 TLS 反向代理，设置 `POCKETQUOTA_ORIGIN=https://budget.example.com` 为你的精确站点来源，并让代理保留原始 Host。不要直接公开 Python HTTP 端口；代理应配置请求超时、并发和速率限制。
 
 后台调度随服务启动，每 30 秒检查到期项目；不需要 LLM 常驻。恢复后补跑离线期间的到期规则。一个数据目录只运行一个服务实例。支持多个用户及其 Agent，使用独立账本数据库；账号数据库集中管理身份与令牌归属。站点管理员负责创建用户，默认不开放匿名注册。
 

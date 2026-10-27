@@ -1,3 +1,5 @@
+<h1 align="center">PocketQuota v0.2.0 — 扮演一个被邪恶的计划限额的ai</h1>
+
 <p align="center">
   <img src="docs/hero.svg" alt="PocketQuota — 像管理 Agent 一样管理自己的消费习惯" width="100%">
 </p>
@@ -93,7 +95,7 @@ cd pocketquota
 python3 -m pocketquota.server --demo --data .demo-data
 ```
 
-打开 **http://127.0.0.1:18790/**，点击 **“试用演示账本”**，即可探索完整界面与虚构示例。
+打开 [本机演示](http://127.0.0.1:18790/)，点击 **“试用演示账本”**，即可探索完整界面与虚构示例。
 
 准备开始自己的预算时，使用 [正式部署指南](docs/deployment.md)。支持直接运行、Python 安装包与 Docker。
 
