@@ -275,7 +275,7 @@ class Ledger:
 
     def do_reverse(self, db, data, actor):
         row = db.execute('SELECT * FROM entries WHERE id=?', (data.get('id'),)).fetchone()
-        if not row or row['kind'] not in ('expense', 'income', 'transfer'):
+        if not row or row['kind'] not in ('expense', 'income', 'transfer', 'legacy_expense'):
             raise Problem('仅能撤销手工支出、收入或转账')
         if db.execute('SELECT 1 FROM entries WHERE reverses=?', (row['id'],)).fetchone():
             raise Problem('该流水已撤销', 409)
@@ -478,7 +478,7 @@ class Ledger:
                 trend.append({"date": d, "spent": self.spent(db, d), "limit": self.rule(db, d)['daily_limit']})
             pending = [r[0] for r in db.execute('SELECT period FROM review_due WHERE period NOT IN (SELECT period FROM reviews) ORDER BY period')]
             last = db.execute("SELECT value FROM meta WHERE key='last_tick'").fetchone()
-            return {"initialized": True, "today": ds, "settings": cfg, "rule": rule, "balances": totals,
+            return {"initialized": True, "legacy_count": db.execute("SELECT COUNT(*) FROM entries WHERE kind='legacy_expense'").fetchone()[0], "today": ds, "settings": cfg, "rule": rule, "balances": totals,
                     "spent": spent, "remaining": rule['daily_limit'] - spent,
                     "usage_percent": round(spent / rule['daily_limit'] * 100, 1) if rule['daily_limit'] else None,
                     "settled": db.execute('SELECT 1 FROM settlements WHERE date=?', (ds,)).fetchone() is not None,
@@ -488,7 +488,7 @@ class Ledger:
                     "spendable": totals['daily'] + totals['flex'],
                     "spendable_capacity": max(0, totals['daily'] + totals['flex'] + spent_assets),
                     "deficit": max(0, -totals['daily'] - totals['flex']),
-                    "month_expense": changes.get('expense', 0) + db.execute("""SELECT COALESCE(SUM(p.cents),0) FROM entries e
+                    "month_expense": db.execute("SELECT COALESCE(SUM(amount),0) FROM entries e WHERE kind='legacy_expense' AND date LIKE ? AND NOT EXISTS(SELECT 1 FROM entries r WHERE r.reverses=e.id)",(month+'%',)).fetchone()[0] + changes.get('expense', 0) + db.execute("""SELECT COALESCE(SUM(p.cents),0) FROM entries e
                        JOIN postings p ON e.id=p.entry_id WHERE p.pool='external' AND e.date LIKE ? AND e.kind='reversal'
                        AND e.reverses IN (SELECT id FROM entries WHERE kind='expense')""", (month+'%',)).fetchone()[0],
                     "month_income": -changes.get('income', 0) - changes.get('scheduled_income', 0) + db.execute("""SELECT -COALESCE(SUM(p.cents),0)

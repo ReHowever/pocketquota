@@ -207,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
                 kind = {'html':'text/html','js':'application/javascript','css':'text/css','svg':'image/svg+xml'}[name.split('.')[-1]]
                 return self.respond(200, (STATIC/name).read_bytes(), kind+'; charset=utf-8')
             if not write and path == '/api/health':
-                return self.respond(200, {'ok': True, 'version': '0.2.0'})
+                return self.respond(200, {'ok': True, 'version': '0.3.0'})
             if not write and path == '/openapi.json':
                 from .api_spec import specification
                 return self.respond(200,specification())
@@ -241,6 +241,13 @@ class Handler(BaseHTTPRequestHandler):
                 if path == '/api/session':
                     return self.respond(200, {'csrf':auth.get('csrf'),'admin':auth['admin'],'site_admin':auth.get('site_admin',False),
                         'username':auth.get('username'),'demo':self.app.demo})
+                if path == '/api/legacy-export.json' and auth['admin']:
+                    with ledger.connect() as db:
+                        exists=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='legacy_records'").fetchone()
+                        rows=[json.loads(r[0]) for r in db.execute('SELECT raw FROM legacy_records ORDER BY source_id')] if exists else []
+                        snapshot=db.execute("SELECT value FROM meta WHERE key='legacy_budget_snapshot'").fetchone()
+                    return self.respond(200,{'records':rows,'budget_snapshot':json.loads(snapshot[0]) if snapshot else None},extra={
+                        'Content-Disposition':'attachment; filename="pocketquota-legacy-archive.json"'})
                 if path == '/api/users' and auth.get('site_admin'):
                     return self.respond(200,self.app.accounts.list())
                 if path == '/api/dashboard':
@@ -275,8 +282,8 @@ class Handler(BaseHTTPRequestHandler):
                     def safe(value):
                         v=str(value or '')
                         return "'"+v if v.startswith(('=','+','-','@','\t','\r')) else v
-                    names={'daily':'日常池','flex':'灵活池','reserve':'保底池'}
-                    labels={'expense':'支出','income':'收入','transfer':'转账','opening':'期初','settlement':'结余划转',
+                    names={'daily':'日常池','flex':'灵活池','reserve':'固定池'}
+                    labels={'legacy_expense':'历史支出（未重复扣款）','expense':'支出','income':'收入','transfer':'转账','opening':'期初','settlement':'结余划转',
                             'coverage':'承担额修正','adjustment':'余额调整','reversal':'撤销','scheduled_income':'自动入账'}
                     with ledger.connect() as db:
                         q='SELECT e.*,EXISTS(SELECT 1 FROM entries r WHERE r.reverses=e.id) AS reversed FROM entries e'

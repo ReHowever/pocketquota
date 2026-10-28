@@ -79,3 +79,13 @@ printf '%s\n' '{"amount":"12.50","request_id":"stable-user-event-0001"}' | pytho
 4. 对账实际值必须由用户核实；不能拿期望余额自己确认。
 5. 余额耗尽不拦截真实支出记录，不动用保底池，不生成银行转账。
 6. 不读取账本数据库或改 JSON 绕过 API；所有写入走幂等接口。
+
+## Harness 旧记账工具兼容
+
+`integrations/harness_bridge.py` 为已有旧工具执行器提供 `declarations()`、`invoke()`、`command()`。它通过 `POCKETQUOTA_URL` 与 `POCKETQUOTA_TOKEN` 连接同一用户账本，复用标准 MCP 的连接约束，无额外依赖。令牌由该用户的 WebUI 签发，仅赋予需要的权限，保存在宿主环境中。
+
+这个适配器绑定一个用户。接入方必须先验证聊天发送者为该账本本人，群聊和其他发送者应在调度层拒绝；多用户须各自使用独立令牌和进程环境。此示例不会替宿主建立 QQ 身份认证。
+
+旧 `bookkeeper_add_expense` 默认日常池，可显式传 `pool`；不通过商品名称猜测个人消费分类。写入必须传稳定的消息 `source_id`，重试保持相同 ID；相同 ID 改变金额会由服务端拒绝。标准 `budget_*` 工具继续使用 `request_id`。旧 `/book`、`/bk` 查询与撤销命令仍可使用，撤销保留审计。
+
+可选 `POCKETQUOTA_LEGACY_CONFIG` 指向宿主已有配置，用于读取 `auto_extract_enabled`；不配置时不依赖旧插件文件。

@@ -13,9 +13,10 @@ const fmt = (cents) =>
     maximumFractionDigits: 2,
   });
 const yuan = (cents) => `¥${fmt(cents)}`;
-const pools = { daily: "日常池", flex: "灵活池", reserve: "保底池" };
+const pools = { daily: "日常池", flex: "灵活池", reserve: "固定池" };
 const kinds = {
   expense: "支出",
+  legacy_expense: "历史支出 · 未重复扣款",
   income: "收入",
   transfer: "转账",
   opening: "期初",
@@ -71,9 +72,11 @@ function applyAppearance() {
   document.documentElement.dataset.theme = appearance.theme;
   document.documentElement.dataset.palette = appearance.palette;
   document.documentElement.dataset.shape = appearance.shape;
+  document.documentElement.dataset.motion = appearance.motion ? "on" : "off";
 }
 applyAppearance();
 let refreshTimer, countTimer;
+let refreshEpoch = 0;
 async function api(path, body, key) {
   const headers = {};
   if (body !== undefined) {
@@ -196,12 +199,12 @@ async function start() {
   }, 30000);
 }
 async function refresh(animate = true) {
+  const epoch = ++refreshEpoch;
+  const previousBalances = state.d?.initialized ? { ...state.d.balances } : null;
   const prior = state.d?.initialized ? gaugeData() : null;
-  const oldTotal = state.d?.initialized
-    ? Object.values(state.d.balances).reduce((a, b) => a + b, 0)
-    : null;
-  state.d = await api("/api/dashboard");
-  if (!state.d.initialized) return setup();
+  const dashboard = await api("/api/dashboard");
+  if (epoch !== refreshEpoch) return;
+  if (!dashboard.initialized) { state.d = dashboard; return setup(); }
   const [entries, schedules, reviews, notifications, rules] = await Promise.all(
     [
       api(
@@ -213,7 +216,9 @@ async function refresh(animate = true) {
       api("/api/rules"),
     ],
   );
+  if (epoch !== refreshEpoch) return;
   Object.assign(state, {
+    d: dashboard,
     entries: entries.items,
     total: entries.total,
     schedules,
@@ -224,15 +229,17 @@ async function refresh(animate = true) {
   if (state.page === "agents") state.tokens = await api("/api/tokens");
   if (state.page === "account" && state.session.site_admin)
     state.users = await api("/api/users");
+  if (epoch !== refreshEpoch) return;
   render();
-  const total = Object.values(state.d.balances).reduce((a, b) => a + b, 0);
-  if (animate && prior && oldTotal !== null && total !== oldTotal)
-    playQuotaEffect(total > oldTotal ? "income" : "expense", prior);
+  updatePoolArtwork(previousBalances);
+  const currentGauge = gaugeData();
+  if (animate && prior && currentGauge.remaining !== prior.remaining)
+    playQuotaEffect(currentGauge.remaining > prior.remaining ? "income" : "expense", prior);
 }
 function appearanceModal() {
   modal(
     "定制你的额度界面",
-    `<form id="appearance-form"><div class="form-grid">${select("界面主题", "theme", '<option value="dark">深空黑</option><option value="light">极简白</option>')}${select("额度条形态", "shape", '<option value="linear">光轨 · 线形额度条</option><option value="ring">轨道 · 圆环额度条</option>')}${select("光谱配色", "palette", '<option value="aurora">极光 · 紫蓝渐变</option><option value="blue">离子 · 冰蓝</option><option value="ember">日珥 · 橙金</option>')}${select("主额度条显示", "metric", '<option value="daily">今日可用额度</option><option value="total">总可消费预算</option>')}<label class="switch full"><input name="motion" type="checkbox" ${appearance.motion ? "checked" : ""}>启用额度粒子动效</label></div>${footer("应用外观")}</form>`,
+    `<form id="appearance-form"><div class="form-grid">${select("界面主题", "theme", '<option value="dark">深空黑</option><option value="light">极简白</option>')}${select("额度条形态", "shape", '<option value="linear">光轨 · 线形额度条</option><option value="ring">轨道 · 圆环额度条</option>')}${select("光谱配色", "palette", '<option value="aurora">极光 · 紫蓝渐变</option><option value="blue">离子 · 冰蓝</option><option value="ember">日珥 · 橙金</option>')}${select("主额度条显示", "metric", '<option value="daily">今日可用额度</option><option value="total">总可消费预算</option>')}<label class="switch full"><input name="motion" type="checkbox" ${appearance.motion ? "checked" : ""}>启用光轨、水波与保险柜动效</label></div>${footer("应用外观")}</form>`,
   );
   for (const k of ["theme", "shape", "palette", "metric"])
     $("[name=" + k + "]", $("#appearance-form")).value = appearance[k];
@@ -427,7 +434,7 @@ function playQuotaEffect(type, prior) {
 }
 function setup() {
   $("#app").innerHTML =
-    `<main class="setup">${brand}<h1>从一个真实的起点开始</h1><p>填写你现在准备分配的金额。这是预算分配，不会连接银行，也不会移动真实资金。</p><form id="setup-form"><div class="form-grid">${field("账本名称", "name", "我的生活额度")}${field("每日限额（元）", "daily_limit", "60.00", "number", "", 'min="0" step="0.01" required')}${field("日常池（元）", "daily", "0.00", "number", "", 'min="0" step="0.01" required')}${field("灵活池（元）", "flex", "0.00", "number", "", 'min="0" step="0.01" required')}${field("保底池（元）", "reserve", "0.00", "number", "不会自动用于补足日常支出", 'min="0" step="0.01" required')}${field("每天结算时间", "settle_time", "21:00", "time")}${field("时区", "timezone", "Asia/Shanghai", "text", "初始化后固定，避免同一天重复结算")}</div>${footer("建立我的账本")}</form></main>`;
+    `<main class="setup">${brand}<h1>从一个真实的起点开始</h1><p>填写你现在准备分配的金额。这是预算分配，不会连接银行，也不会移动真实资金。</p><form id="setup-form"><div class="form-grid">${field("账本名称", "name", "我的生活额度")}${field("每日限额（元）", "daily_limit", "60.00", "number", "", 'min="0" step="0.01" required')}${field("日常池（元）", "daily", "0.00", "number", "", 'min="0" step="0.01" required')}${field("灵活池（元）", "flex", "0.00", "number", "", 'min="0" step="0.01" required')}${field("固定池（元）", "reserve", "0.00", "number", "不会自动用于补足日常支出", 'min="0" step="0.01" required')}${field("每天结算时间", "settle_time", "21:00", "time")}${field("时区", "timezone", "Asia/Shanghai", "text", "初始化后固定，避免同一天重复结算")}</div>${footer("建立我的账本")}</form></main>`;
   attachForm("#setup-form", async (data, key) => {
     await api("/api/setup", data, key);
     await refresh();
@@ -446,7 +453,7 @@ function render() {
   const d = state.d;
   document.body.classList.toggle("bankrupt", d.bankrupt);
   $("#app").innerHTML =
-    `<div class="shell"><aside class="sidebar">${brand}<div class="nav-label">PERSONAL CONSOLE</div><nav class="nav" aria-label="主导航">${navItems.map(([id, label]) => `<button data-nav="${id}" class="${id === state.page ? "active" : ""}" ${id === state.page ? 'aria-current="page"' : ""}>${icon(id)}${label}</button>`).join("")}</nav><div class="side-foot"><span>自托管 · v0.2.0</span><span>◉</span></div></aside><main class="workspace"><header class="topbar"><div><span class="crumb">我的工作区</span> / ${esc(d.settings.name)}</div><div class="top-actions"><span class="hide-mobile">${esc(d.today)} · ${esc(d.settings.timezone)}</span><span><i class="status-dot"></i>${state.session.demo ? "演示数据" : "私人账本"}</span><a class="guide-link" href="/guide.html" target="_blank" rel="noopener">指南 ↗</a><button class="appearance-button" id="appearance" title="主题、配色与额度条">◐ <span>外观</span></button><button class="ghost" id="refresh" title="刷新">↻</button><button class="avatar" id="account-avatar" aria-label="账号设置">${esc((state.session.username || "P").slice(0, 1).toUpperCase())}</button></div></header><div id="page">${{ home: home, ledger: ledger, review: review, rules: rules, agents: agents, account: account }[state.page]()}</div></main></div>`;
+    `<div class="shell"><aside class="sidebar">${brand}<div class="nav-label">PERSONAL CONSOLE</div><nav class="nav" aria-label="主导航">${navItems.map(([id, label]) => `<button data-nav="${id}" class="${id === state.page ? "active" : ""}" ${id === state.page ? 'aria-current="page"' : ""}>${icon(id)}${label}</button>`).join("")}</nav><div class="side-foot"><span>自托管 · v0.3.0</span><span>◉</span></div></aside><main class="workspace"><header class="topbar"><div class="ledger-name" title="${esc(d.settings.name)}">${esc(d.settings.name)}</div><div class="top-actions"><span class="hide-mobile">${esc(d.today)} · ${esc(d.settings.timezone)}</span><span><i class="status-dot"></i>${state.session.demo ? "演示数据" : "私人账本"}</span><a class="guide-link" href="/guide.html" target="_blank" rel="noopener">指南 ↗</a><button class="appearance-button" id="appearance" title="主题、配色与额度条">◐ <span>外观</span></button><button class="ghost" id="refresh" title="刷新">↻</button><button class="avatar" id="account-avatar" aria-label="账号设置">${esc((state.session.username || "P").slice(0, 1).toUpperCase())}</button></div></header><div id="page">${{ home: home, ledger: ledger, review: review, rules: rules, agents: agents, account: account }[state.page]()}</div></main></div>`;
   document.querySelectorAll("[data-nav]").forEach(
     (b) =>
       (b.onclick = async () => {
@@ -488,7 +495,7 @@ function txList(items) {
   return items.length
     ? items
         .map((r) => {
-          const expense = r.kind === "expense";
+          const expense = ["expense", "legacy_expense"].includes(r.kind);
           const positive = ["income", "scheduled_income", "opening"].includes(
             r.kind,
           );
@@ -497,6 +504,107 @@ function txList(items) {
         .join("")
     : '<div class="empty">暂无流水</div>';
 }
+// Pool artwork is decorative. All displayed amounts come from the ledger.
+function poolArtwork() {
+  const d = state.d;
+  const controls = (p) => `<div class="pool-controls"><button class="secondary" data-pool-move="${p}" data-direction="in" aria-label="存入${pools[p]}">${icon("plus")}存入</button><button class="secondary" data-pool-move="${p}" data-direction="out" aria-label="从${pools[p]}取出">${icon("arrow")}取出</button><button class="ghost" data-adjust="${p}" aria-label="修改${pools[p]}余额">改余额</button></div>`;
+  return `<section class="savings-grid" aria-label="蓄水池与保险柜">
+    <article class="savings-card reservoir-card ${d.balances.flex <= 0 ? "reservoir-dry" : ""} ${fmt(d.balances.flex).length > 9 ? "long-balance" : ""} ${d.balances.flex < 0 ? "pool-deficit" : ""}" data-pool-card="flex">
+      <header class="savings-heading"><div><span class="savings-eyebrow">FLEX RESERVOIR</span><h2>灵活池<span>蓄水池</span></h2></div><button class="pool-amount" data-adjust="flex" aria-label="修改灵活池余额">${yuan(d.balances.flex)}<span aria-hidden="true">↗</span></button></header>
+      <div class="reservoir-art" role="img" aria-label="灵活池蓄水，当前余额${yuan(d.balances.flex)}">
+        <div class="reservoir-glass"><div class="reservoir-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <div class="reservoir-water"><svg class="water-wave wave-back" viewBox="0 0 600 32" preserveAspectRatio="none" aria-hidden="true"><path d="M0 16Q75 0 150 16T300 16T450 16T600 16V32H0Z"/></svg><svg class="water-wave wave-front" viewBox="0 0 600 32" preserveAspectRatio="none" aria-hidden="true"><path d="M0 16Q75 0 150 16T300 16T450 16T600 16V32H0Z"/></svg><span class="water-shine" aria-hidden="true"></span></div>
+          <div class="water-droplets" aria-hidden="true"><i></i><i></i><i></i></div><span class="reservoir-caption">${d.balances.flex < 0 ? "余额不足，等待补充" : d.balances.flex === 0 ? "从第一滴开始积累" : "一点一滴，留住余裕"}</span>
+        </div><span class="pool-change" aria-live="polite"></span>
+      </div>
+      <p class="pool-description">${d.rule.carry_over ? "每日结余自动汇入，水位随余额起落。" : "存入慢慢积累，取出留给需要的时候。"}</p>${controls("flex")}
+    </article>
+    <article class="savings-card vault-card ${d.balances.reserve <= 0 ? "vault-empty" : ""} ${fmt(d.balances.reserve).length > 9 ? "long-balance" : ""} ${d.balances.reserve < 0 ? "pool-deficit" : ""}" data-pool-card="reserve">
+      <header class="savings-heading"><div><span class="savings-eyebrow">RESERVE VAULT</span><h2>固定池<span>保险柜</span></h2></div><button class="pool-amount" data-adjust="reserve" aria-label="修改固定池余额">${yuan(d.balances.reserve)}<span aria-hidden="true">↗</span></button></header>
+      <div class="vault-art" role="img" aria-label="固定池保险柜，当前余额${yuan(d.balances.reserve)}"><div class="vault-scene" aria-hidden="true"><div class="vault-base"></div><div class="vault-shell"><div class="vault-interior"><i class="vault-note note-one"></i><i class="vault-note note-two"></i><i class="vault-note note-three"></i></div><div class="vault-door"><span class="vault-led"></span><span class="vault-wheel"><i></i><i></i><i></i></span><span class="vault-hinge hinge-top"></span><span class="vault-hinge hinge-bottom"></span><span class="vault-door-caption">RESERVE</span></div></div><i class="vault-moving-note"></i></div><span class="pool-change" aria-live="polite"></span></div>
+      <p class="pool-description">固定留存，手动取用；不会自动补足日常消费。</p>${controls("reserve")}
+    </article>
+  </section>`;
+}
+
+function reservoirLevel(cents) {
+  // A monotone decorative mapping, not a percentage of an invented savings target.
+  const amount = Math.max(0, Number(cents) || 0);
+  return amount === 0 ? 0 : Math.min(92, Math.max(5, (amount / (amount + 10000)) * 100));
+}
+
+function updatePoolArtwork(previousBalances) {
+  const moving = appearance.motion && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll("[data-pool-card]").forEach((card) => {
+    const pool = card.dataset.poolCard;
+    const current = state.d.balances[pool];
+    const old = previousBalances?.[pool];
+    const water = $(".reservoir-water", card);
+    if (water) {
+      const finalTransform = `translateY(${100 - reservoirLevel(current)}%)`;
+      water.style.transform = finalTransform;
+      card.style.setProperty("--wave-phase", `${-(Date.now() % 6000) / 1000}s`);
+      if (moving && old !== undefined && old !== current) {
+        water.animate([
+          { transform: `translateY(${100 - reservoirLevel(old)}%)`, opacity: old > 0 ? 0.85 : 0, offset: 0 },
+          { transform: `translateY(${Math.max(0, Math.min(100, 100 - reservoirLevel(current) + (current > old ? -1.5 : 1.5)))}%)`, opacity: current > 0 ? 0.85 : 0.12, offset: 0.8 },
+          { transform: finalTransform, opacity: current > 0 ? 0.85 : 0, offset: 1 },
+        ], { duration: 1300, easing: "cubic-bezier(.22,1,.36,1)" });
+      }
+    }
+    if (old === undefined || old === current) return;
+    const delta = current - old;
+    const change = $(".pool-change", card);
+    change.textContent = `${delta > 0 ? "+" : "−"}${yuan(Math.abs(delta))}`;
+    card.dataset.flow = delta > 0 ? "in" : "out";
+    if (moving) card.classList.add("pool-changing");
+    else change.classList.add("change-static");
+    setTimeout(() => {
+      if (!card.isConnected) return;
+      card.classList.remove("pool-changing");
+      change.classList.remove("change-static");
+      change.textContent = "";
+      delete card.dataset.flow;
+    }, 2300);
+  });
+}
+
+function poolMoveModal(target, direction) {
+  const incoming = direction === "in";
+  const options = Object.entries(pools).filter(([key]) => key !== target)
+    .map(([key, name]) => `<option value="${key}">${name}</option>`).join("") +
+    `<option value="external">${incoming ? "外部收入 · 新增资金" : "实际支出 · 离开账本"}</option>`;
+  modal((incoming ? "存入" : "取出") + pools[target],
+    `<form id="pool-move-form"><div class="pool-form-balance"><span>当前${pools[target]}</span><strong>${yuan(state.d.balances[target])}</strong></div><div class="form-grid">${field("金额（元）", "amount", "", "number", "", 'min="0.01" step="0.01" required autofocus')}${select(incoming ? "资金来源" : "转入位置", "counterparty", options)}<div class="full">${field("备注", "note", "", "text", "", 'maxlength="240"')}</div></div><p class="pool-move-preview" id="pool-move-preview" aria-live="polite">选择金额后显示变动。</p><p class="subtle">资金池之间转入转出不计为消费；只有选择实际支出才计入支出。</p>${footer(incoming ? "确认存入" : "确认取出")}</form>`);
+  const preview = () => {
+    const raw = $("#f-amount").value;
+    const cents = /^\d+(\.\d{1,2})?$/.test(raw) ? Math.round(Number(raw) * 100) : null;
+    const partner = $("#f-counterparty").value;
+    const value = $("#pool-move-preview");
+    if (cents === null || cents <= 0) { value.textContent = "输入金额后显示变动。"; return; }
+    const after = state.d.balances[target] + (incoming ? cents : -cents);
+    const otherAfter = partner === "external" ? null : state.d.balances[partner] + (incoming ? -cents : cents);
+    value.textContent = `${pools[target]} ${yuan(state.d.balances[target])} → ${yuan(after)}` +
+      (otherAfter === null ? "" : `；${pools[partner]} → ${yuan(otherAfter)}`);
+    value.classList.toggle("warning", after < 0 || (otherAfter !== null && otherAfter < 0));
+  };
+  $("#f-amount").addEventListener("input", preview);
+  $("#f-counterparty").addEventListener("change", preview);
+  attachForm("#pool-move-form", async (data, key) => {
+    const external = data.counterparty === "external";
+    const payload = { amount: data.amount, date: state.d.today,
+      kind: external ? (incoming ? "income" : "expense") : "transfer",
+      pool: external ? target : incoming ? data.counterparty : target,
+      note: data.note || `${incoming ? "存入" : "取出"}${pools[target]}` };
+    if (!external) payload.to_pool = incoming ? target : data.counterparty;
+    await api("/api/entries", payload, key);
+    $("#dialog").close();
+    await refresh();
+    toast(`已${incoming ? "存入" : "取出"}${pools[target]} · ${yuan(Math.round(Number(data.amount) * 100))}`);
+  });
+}
+
+
 function home() {
   const d = state.d;
   const percent = Math.max(0, Math.min(100, d.usage_percent || 0));
@@ -505,24 +613,24 @@ function home() {
   )
     .map(
       ([k, v]) =>
-        `<div class="pool-line"><span><i class="dot ${k}"></i>${v}</span><strong>${yuan(d.balances[k])}</strong></div>`,
+        `<div class="pool-line"><span><i class="dot ${k}"></i>${v}</span><button class="pool-summary-amount" data-adjust="${k}" aria-label="修改${v}余额">${yuan(d.balances[k])}<span aria-hidden="true">↗</span></button></div>`,
     )
     .join(
       "",
-    )}</div></section></div><div class="metrics"><div class="metric"><div class="metric-label">本月已支出 ${icon("wallet")}</div><div class="value">${yuan(d.month_expense)}</div></div><div class="metric"><div class="metric-label">本月已入账 ${icon("arrow")}</div><div class="value">${yuan(d.month_income)}</div></div><div class="metric"><div class="metric-label">${d.settled ? "今日结算状态" : "预计今日结余"} ${icon("clock")}</div><div class="value">${d.settled ? "已结算" : yuan(d.projected_carry)}</div></div></div><div class="lower-grid"><section class="panel"><div class="panel-heading"><h2>最近的消费与变动</h2><button class="ghost" id="view-ledger">查看全部 →</button></div><div class="ledger-list">${txList(state.entries.slice(0, 5))}</div></section><section class="panel"><div class="panel-heading"><h2>近 7 日额度使用</h2><small>日常消费</small></div><div class="chart">${d.trend.map((r, i) => `<div class="chart-col"><div class="chart-value">${r.spent ? fmt(r.spent) : "—"}</div><div class="bar-area"><div class="bar" data-height="${Math.max(3, (r.spent / Math.max(...d.trend.map((x) => Math.max(x.spent, x.limit)), 1)) * 108)}" title="${esc(r.date)}：${yuan(r.spent)}"></div></div><small>${i === 6 ? "今天" : r.date.slice(5).replace("-", "/")}</small></div>`).join("")}</div></section></div>${d.warnings.length ? `<div class="inline-callout red-callout">${d.warnings.map(esc).join("<br>")}</div>` : ""}`;
+    )}</div></section></div>${poolArtwork()}<div class="metrics"><div class="metric"><div class="metric-label">本月已支出 ${icon("wallet")}</div><div class="value">${yuan(d.month_expense)}</div></div><div class="metric"><div class="metric-label">${d.legacy_count ? "本月入账（新账本）" : "本月已入账"} ${icon("arrow")}</div><div class="value">${yuan(d.month_income)}</div></div><div class="metric"><div class="metric-label">${d.settled ? "今日结算状态" : "预计今日结余"} ${icon("clock")}</div><div class="value">${d.settled ? "已结算" : yuan(d.projected_carry)}</div></div></div><div class="lower-grid"><section class="panel"><div class="panel-heading"><h2>最近的消费与变动</h2><button class="ghost" id="view-ledger">查看全部 →</button></div><div class="ledger-list">${txList(state.entries.slice(0, 5))}</div></section><section class="panel"><div class="panel-heading"><h2>近 7 日额度使用</h2><small>日常消费</small></div><div class="chart">${d.trend.map((r, i) => `<div class="chart-col"><div class="chart-value">${r.spent ? fmt(r.spent) : "—"}</div><div class="bar-area"><div class="bar" data-height="${Math.max(3, (r.spent / Math.max(...d.trend.map((x) => Math.max(x.spent, x.limit)), 1)) * 108)}" title="${esc(r.date)}：${yuan(r.spent)}"></div></div><small>${i === 6 ? "今天" : r.date.slice(5).replace("-", "/")}</small></div>`).join("")}</div></section></div>${d.warnings.length ? `<div class="inline-callout red-callout">${d.warnings.map(esc).join("<br>")}</div>` : ""}`;
 }
 function ledger() {
-  return `${title("TRANSACTION JOURNAL", "收支流水", "补记、撤销和自动划转都会保留记录。余额调整不会抹去历史。", addButton())}<section class="panel"><div class="panel-heading"><h2>收支流水 <small>共 ${state.total} 笔</small></h2><a class="secondary" href="/api/export.csv?start=${encodeURIComponent(state.start)}&amp;end=${encodeURIComponent(state.end)}">导出 CSV</a></div><form id="filter-form" class="filters"><label>起始 <input name="start" type="date" value="${esc(state.start)}"></label><label>截止 <input name="end" type="date" value="${esc(state.end)}"></label><button class="secondary" type="submit">筛选</button><button class="ghost" type="button" id="clear-filter">重置</button></form><div class="table-wrap"><table><thead><tr><th>日期 / 来源</th><th>用途</th><th>金额</th><th>资金池 / 实际承担</th><th>操作</th></tr></thead><tbody>${state.entries
+  return `${title("TRANSACTION JOURNAL", "收支流水", "补记、撤销和自动划转都会保留记录。余额调整不会抹去历史。", addButton())}${state.d.legacy_count ? `<div class="inline-callout">已保留 ${state.d.legacy_count} 笔历史支出，不重复扣减当前余额。旧预算收入、调整与结算快照见 <a href="/api/legacy-export.json">迁移原始档案</a>。</div>` : ""}<section class="panel"><div class="panel-heading"><h2>收支流水 <small>共 ${state.total} 笔</small></h2><a class="secondary" href="/api/export.csv?start=${encodeURIComponent(state.start)}&amp;end=${encodeURIComponent(state.end)}">导出 CSV</a></div><form id="filter-form" class="filters"><label>起始 <input name="start" type="date" value="${esc(state.start)}"></label><label>截止 <input name="end" type="date" value="${esc(state.end)}"></label><button class="secondary" type="submit">筛选</button><button class="ghost" type="button" id="clear-filter">重置</button></form><p class="table-scroll-hint">左右滑动，查看完整流水和操作。</p><div class="table-wrap"><table><thead><tr><th>日期 / 来源</th><th>用途</th><th>金额</th><th>资金池 / 实际承担</th><th>操作</th></tr></thead><tbody>${state.entries
     .map(
       (r) =>
-        `<tr><td>${esc(r.date)}<small>${r.actor.startsWith("agent:") ? "Agent" : esc(r.actor)}</small></td><td>${esc(r.note || r.category || kinds[r.kind])}<small>${esc(kinds[r.kind])} ${r.reversed ? "· 已撤销" : ""}</small></td><td class="mono">${yuan(r.amount)}</td><td><span class="badge">${esc(pools[r.pool])}</span>${
+        `<tr><td>${esc(r.date)}<small>${r.actor.startsWith("agent:") ? "Agent" : esc(r.actor)}</small></td><td>${esc(r.note || r.category || kinds[r.kind])}<small>${esc(kinds[r.kind])} ${r.reversed ? "· 已撤销" : ""}</small></td><td class="mono">${yuan(r.amount)}</td><td><span class="badge">${esc(r.kind === "legacy_expense" ? "历史归档" : pools[r.pool])}</span>${
           r.kind === "expense"
             ? `<small>${Object.entries(r.postings)
                 .filter(([k, v]) => k !== "external" && v < 0)
                 .map(([k, v]) => esc(pools[k]) + " " + yuan(-v))
                 .join(" + ")}</small>`
             : ""
-        }</td><td>${["expense", "income", "transfer"].includes(r.kind) && !r.reversed ? `<button class="ghost warning" data-reverse="${r.id}">撤销</button>` : "—"}</td></tr>`,
+        }</td><td>${["expense", "income", "transfer", "legacy_expense"].includes(r.kind) && !r.reversed ? `<button class="ghost warning" data-reverse="${r.id}">撤销</button>` : "—"}</td></tr>`,
     )
     .join(
       "",
@@ -594,7 +702,8 @@ function entryModal(kind = "expense") {
     const r = await api("/api/entries", data, key);
     $("#dialog").close();
     await refresh(false);
-    playQuotaEffect(data.kind === "income" ? "income" : "expense", prior);
+    const currentGauge = gaugeData();
+    if (currentGauge.remaining !== prior.remaining) playQuotaEffect(currentGauge.remaining > prior.remaining ? "income" : "expense", prior);
     toast(
       r.allocation?.flex
         ? `已记录 · 日常 ${yuan(r.allocation.daily)} + 灵活 ${yuan(r.allocation.flex)}`
@@ -686,6 +795,13 @@ function reviewModal() {
   });
 }
 function bindPage() {
+  document.querySelectorAll(".allocation .total,.metric .value").forEach(el => {
+    const wide = el.textContent.trim().length > 12;
+    el.classList.toggle("wide-money", wide);
+    if (el.closest(".metric")) el.closest(".metric").classList.toggle("wide-money-card", wide);
+  });
+  updatePoolArtwork(null);
+  document.querySelectorAll("[data-pool-move]").forEach(b => { b.onclick = () => poolMoveModal(b.dataset.poolMove, b.dataset.direction); });
   document
     .querySelectorAll("[data-height]")
     .forEach((el) => (el.style.height = el.dataset.height + "px"));

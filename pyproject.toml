@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pocketquota"
-version = "0.2.0"
+version = "0.3.0"
 description = "Manage your spending habits like you manage an agent. Self-hosted budgets, WebUI and MCP."
 readme = "README.md"
 requires-python = ">=3.11"

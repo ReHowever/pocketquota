@@ -1,8 +1,11 @@
-<h1 align="center">PocketQuota v0.2.0 — 扮演一个被邪恶的计划限额的ai</h1>
+<h1 align="center">PocketQuota v0.3.0 — 扮演一个被邪恶的计划限额的ai</h1>
 
 <p align="center">
   <img src="docs/hero.svg" alt="PocketQuota — 像管理 Agent 一样管理自己的消费习惯" width="100%">
 </p>
+
+**v0.3.0** · 蓄水池与保险柜动效、直接改余额、旧账无损迁入与 Harness 共享账本。[更新详情](docs/updates-v0.3.md)
+
 
 <p align="center">
   <a href="https://github.com/ReHowever/pocketquota/actions/workflows/checks.yml"><img src="https://github.com/ReHowever/pocketquota/actions/workflows/checks.yml/badge.svg" alt="Checks"></a>

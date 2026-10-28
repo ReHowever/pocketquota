@@ -23,6 +23,7 @@ PATTERNS={
     'api-secret':re.compile(r'\bsk-[A-Za-z0-9_-]{24,}'),
     'jwt':re.compile(r'\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{15,}'),
     'personal-path':re.compile(r'/(?:Users|home)/[a-zA-Z][^\s/"\']+/'),
+    'windows-personal-path':re.compile(r'[A-Za-z]:[\\/]Users[\\/][^\s\\/"\']+[\\/]',re.I),
     'private-mail':re.compile(r'\b[A-Za-z0-9._%+-]+@(?:qq|163|126|gmail|outlook|hotmail)\.com\b',re.I),
     'phone':re.compile(r'(?<!\d)1[3-9]\d{9}(?!\d)'),
 }

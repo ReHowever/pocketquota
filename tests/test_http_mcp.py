@@ -50,6 +50,16 @@ class HTTPTest(unittest.TestCase):
         self.assertEqual(self.request('/api/dashboard')[0],401)
         self.assertEqual(self.request('/api/export.csv')[0],401)
 
+    def test_legacy_archive_requires_owner_and_is_account_scoped(self):
+        self.assertEqual(self.request('/api/legacy-export.json')[0],401)
+        _,agent,_=self.request('/api/tokens',{'name':'Archive reader','scopes':['read','write','manage']},self.owner)
+        self.assertEqual(self.request('/api/legacy-export.json',token=agent['token'])[0],404)
+        _,headers=self.new_user()
+        status,archive,hs=self.request('/api/legacy-export.json',headers=headers)
+        self.assertEqual(status,200)
+        self.assertEqual(archive,{'records':[],'budget_snapshot':None})
+        self.assertEqual(hs['Cache-Control'],'no-store')
+
     def test_origin_and_host_rejected(self):
         self.assertEqual(self.request('/api/dashboard',token=self.owner,headers={'Origin':'https://evil.example'})[0],403)
         self.assertEqual(self.request('/api/dashboard',token=self.owner,headers={'Host':'evil.example'})[0],403)
