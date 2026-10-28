@@ -2071,3 +2071,22 @@ dialog{max-width:calc(100% - 24px);max-height:calc(100dvh - 32px);padding:26px;o
 @media(max-width:360px){.dual-orbit-layout{gap:10px}.dual-orbit-layout .quota-orbit{width:110px;height:110px}.gauge-caption strong{font-size:19px}.gauge-name{font-size:8px}.gauge-caption small{font-size:8px}.dual-orbit-layout .orbit-center strong{font-size:19px}}
 :root[data-motion=off] .pool-orbit-fill,:root[data-motion=off] .pool-quota-fill{transition:none}
 @media(prefers-reduced-motion:reduce){.pool-orbit-fill,.pool-quota-fill{transition:none}}
+
+/* Equal visual weight for the orbit and its two numerical readouts. */
+.dual-orbit-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:clamp(24px,4vw,44px);align-items:center;margin-block:26px 14px}
+.dual-orbit-layout .quota-orbit{justify-self:center;width:clamp(140px,15vw,180px);height:auto;aspect-ratio:1}
+.dual-caption{justify-self:center;width:max-content;max-width:100%;gap:22px}
+@media(max-width:850px){.dual-orbit-layout .quota-orbit{width:clamp(132px,31vw,180px)}}
+@media(max-width:520px){.dual-orbit-layout{column-gap:26px}.dual-caption{gap:20px}.dual-orbit-layout .quota-orbit{width:132px}.gauge-caption strong{font-size:23px}}
+@media(max-width:380px){.dual-orbit-layout{grid-template-columns:100px minmax(0,1fr);column-gap:20px}.dual-orbit-layout .quota-orbit{width:100px}.dual-caption{justify-self:end;gap:17px}.gauge-caption strong{font-size:19px}}
+.reservoir-ripple{position:absolute;left:50%;top:0;width:22%;height:14px;border:1px solid #d6fbff;border-radius:50%;opacity:0;transform:translate(-50%,-50%) scale(.1);pointer-events:none}
+.reservoir-water .reservoir-ripple:nth-last-child(2){width:34%}
+.pool-changing .reservoir-ripple{animation:reservoir-ripple 1.4s ease-out both}
+.pool-changing .reservoir-ripple:nth-last-child(2){animation-delay:.22s}
+.pool-changing[data-flow=out] .reservoir-ripple{animation-name:reservoir-drain}
+.pool-changing[data-flow=out] .water-shine{animation:reservoir-shimmer 1.4s ease both}
+@keyframes reservoir-ripple{0%{opacity:0;transform:translate(-50%,-50%) scale(.1)}20%{opacity:.8}100%{opacity:0;transform:translate(-50%,-50%) scale(3.5)}}
+@keyframes reservoir-drain{0%{opacity:0;transform:translate(-50%,-50%) scale(3.5)}25%{opacity:.6}100%{opacity:0;transform:translate(-50%,-50%) scale(.1)}}
+@keyframes reservoir-shimmer{0%,100%{opacity:.2}40%{opacity:.8;transform:scaleX(.5)}}
+:root[data-motion=off] .reservoir-ripple{animation:none!important}
+@media(prefers-reduced-motion:reduce){.reservoir-ripple{animation:none!important}}

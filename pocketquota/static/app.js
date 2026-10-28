@@ -525,7 +525,7 @@ function poolArtwork() {
       <header class="savings-heading"><div><span class="savings-eyebrow">FLEX RESERVOIR</span><h2>灵活池<span>蓄水池</span></h2></div><button class="pool-amount" data-adjust="flex" aria-label="修改灵活池余额">${yuan(d.balances.flex)}<span aria-hidden="true">↗</span></button></header>
       <div class="reservoir-art" role="img" aria-label="灵活池蓄水，当前余额${yuan(d.balances.flex)}">
         <div class="reservoir-glass"><div class="reservoir-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-          <div class="reservoir-water"><svg class="water-wave wave-back" viewBox="0 0 600 32" preserveAspectRatio="none" aria-hidden="true"><path d="M0 16Q75 0 150 16T300 16T450 16T600 16V32H0Z"/></svg><svg class="water-wave wave-front" viewBox="0 0 600 32" preserveAspectRatio="none" aria-hidden="true"><path d="M0 16Q75 0 150 16T300 16T450 16T600 16V32H0Z"/></svg><span class="water-shine" aria-hidden="true"></span></div>
+          <div class="reservoir-water"><svg class="water-wave wave-back" viewBox="0 0 600 32" preserveAspectRatio="none" aria-hidden="true"><path d="M0 16Q75 0 150 16T300 16T450 16T600 16V32H0Z"/></svg><svg class="water-wave wave-front" viewBox="0 0 600 32" preserveAspectRatio="none" aria-hidden="true"><path d="M0 16Q75 0 150 16T300 16T450 16T600 16V32H0Z"/></svg><span class="water-shine" aria-hidden="true"></span><i class="reservoir-ripple" aria-hidden="true"></i><i class="reservoir-ripple" aria-hidden="true"></i></div>
           <div class="water-droplets" aria-hidden="true"><i></i><i></i><i></i></div><span class="reservoir-caption">${d.balances.flex < 0 ? "余额不足，等待补充" : d.balances.flex === 0 ? "从第一滴开始积累" : "一点一滴，留住余裕"}</span>
         </div><span class="pool-change" aria-live="polite"></span>
       </div>
@@ -542,7 +542,7 @@ function poolArtwork() {
 function reservoirLevel(cents) {
   // A monotone decorative mapping, not a percentage of an invented savings target.
   const amount = Math.max(0, Number(cents) || 0);
-  return amount === 0 ? 0 : Math.min(92, Math.max(5, (amount / (amount + 10000)) * 100));
+  return (amount / (amount + 10000)) * 94;
 }
 
 function updatePoolArtwork(previousBalances) {
@@ -555,11 +555,14 @@ function updatePoolArtwork(previousBalances) {
     if (water) {
       const finalTransform = `translateY(${100 - reservoirLevel(current)}%)`;
       water.style.transform = finalTransform;
+      water.dataset.balance = String(current);
+      water.dataset.level = reservoirLevel(current).toFixed(4);
       card.style.setProperty("--wave-phase", `${-(Date.now() % 6000) / 1000}s`);
       if (moving && old !== undefined && old !== current) {
+        const impulse = Math.min(7, Math.max(1.8, Math.log1p(Math.abs(current - old) / 100) * 1.1));
         water.animate([
           { transform: `translateY(${100 - reservoirLevel(old)}%)`, opacity: old > 0 ? 0.85 : 0, offset: 0 },
-          { transform: `translateY(${Math.max(0, Math.min(100, 100 - reservoirLevel(current) + (current > old ? -1.5 : 1.5)))}%)`, opacity: current > 0 ? 0.85 : 0.12, offset: 0.8 },
+          { transform: `translateY(${Math.max(0, Math.min(100, 100 - reservoirLevel(current) + (current > old ? -impulse : impulse)))}%)`, opacity: current > 0 ? 0.85 : 0.12, offset: 0.8 },
           { transform: finalTransform, opacity: current > 0 ? 0.85 : 0, offset: 1 },
         ], { duration: 1300, easing: "cubic-bezier(.22,1,.36,1)" });
       }
