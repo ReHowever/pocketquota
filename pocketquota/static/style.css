@@ -2055,3 +2055,19 @@ dialog{max-width:calc(100% - 24px);max-height:calc(100dvh - 32px);padding:26px;o
 .reservoir-dry .reservoir-water{opacity:0}.vault-empty .vault-note{opacity:0}.pool-deficit .pool-amount{color:#ff9ba5}:root[data-theme=light] .pool-deficit .pool-amount{color:#b42d37}
 
 .ledger-list{grid-template-columns:minmax(0,1fr);min-width:0}.transaction{min-width:0;max-width:100%;width:100%}.tx-main{min-width:0}.tx-amount{flex:none}.quota>#quota-fx{width:100%;height:100%}
+
+/* Two independent quantities: daily allowance and the entire daily pool. */
+.pool-orbit-track,.pool-orbit-fill{fill:none;stroke-width:10}
+.pool-orbit-fill{stroke:url(#pool-orbit-gradient);stroke-linecap:round;transition:stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1)}
+.dual-caption{display:grid;gap:19px;min-width:0;flex:1}
+.gauge-caption{display:grid;gap:5px;min-width:0}.gauge-caption strong{font-size:clamp(20px,2.7vw,32px);line-height:1.15;white-space:nowrap;letter-spacing:-.04em}.gauge-caption small{font-size:10px;white-space:nowrap}
+.gauge-name{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted);white-space:nowrap}.gauge-key{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}.pool-key{background:#69dcca}
+.pool-caption strong{color:#91e8d9}:root[data-theme=light] .pool-caption strong{color:#137b6e}
+.dual-orbit-layout .orbit-center strong{font-size:25px}.dual-orbit-layout{gap:18px}.dual-orbit-layout .quota-orbit{width:166px;height:166px}
+.dual-lines{display:grid;gap:24px;margin-top:24px}.dual-lines .progress-info{gap:10px;align-items:baseline}.dual-lines .progress-info>span{white-space:nowrap;font-size:11px}.dual-lines .progress-info strong{white-space:nowrap;font-size:13px}.dual-lines .progress-info small{font-size:10px;color:var(--muted);font-weight:400}
+.pool-quota-fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#41bda9,#91e8d9);transition:width .7s cubic-bezier(.2,.8,.2,1)}
+@media(max-width:1120px) and (min-width:851px){.dual-orbit-layout{gap:12px}.dual-orbit-layout .quota-orbit{width:140px;height:140px}.gauge-caption strong{font-size:22px}}
+@media(max-width:520px){.dual-orbit-layout{gap:14px;flex-wrap:nowrap}.dual-orbit-layout .quota-orbit{width:132px;height:132px}.dual-orbit-layout .orbit-center strong{font-size:22px}.gauge-caption strong{font-size:22px}.dual-caption{gap:16px}.gauge-caption small{font-size:9px}.gauge-name{font-size:9px}.dual-lines .progress-info{flex-wrap:wrap;gap:5px}.dual-lines .progress-info strong{font-size:14px}}
+@media(max-width:360px){.dual-orbit-layout{gap:10px}.dual-orbit-layout .quota-orbit{width:110px;height:110px}.gauge-caption strong{font-size:19px}.gauge-name{font-size:8px}.gauge-caption small{font-size:8px}.dual-orbit-layout .orbit-center strong{font-size:19px}}
+:root[data-motion=off] .pool-orbit-fill,:root[data-motion=off] .pool-quota-fill{transition:none}
+@media(prefers-reduced-motion:reduce){.pool-orbit-fill,.pool-quota-fill{transition:none}}

@@ -454,6 +454,17 @@ class Ledger:
             db.execute("INSERT OR REPLACE INTO meta VALUES('last_tick',?)", (self.stamp(),))
             self.check_bankruptcy(db)
 
+    def daily_pool_stats(self, db, balance):
+        # Net positive funding from original entries, excluding reversed funding.
+        # Corrections, expenses and repeated settlements must not inflate the reference total.
+        funded = db.execute("""SELECT COALESCE(SUM(p.cents),0) FROM postings p
+            JOIN entries e ON e.id=p.entry_id WHERE p.pool='daily' AND p.cents>0
+            AND e.kind IN ('opening','income','scheduled_income','transfer','adjustment')
+            AND NOT EXISTS(SELECT 1 FROM entries r WHERE r.reverses=e.id)""").fetchone()[0]
+        capacity = max(0, funded, balance)
+        return {'balance': balance, 'funded': capacity,
+                'percent': round(max(0, balance) / capacity * 100, 2) if capacity else 0}
+
     def dashboard(self):
         with self.connect() as db:
             if not self.initialized(db):
@@ -480,6 +491,7 @@ class Ledger:
             last = db.execute("SELECT value FROM meta WHERE key='last_tick'").fetchone()
             return {"initialized": True, "legacy_count": db.execute("SELECT COUNT(*) FROM entries WHERE kind='legacy_expense'").fetchone()[0], "today": ds, "settings": cfg, "rule": rule, "balances": totals,
                     "spent": spent, "remaining": rule['daily_limit'] - spent,
+                    "daily_pool": self.daily_pool_stats(db, totals['daily']),
                     "usage_percent": round(spent / rule['daily_limit'] * 100, 1) if rule['daily_limit'] else None,
                     "settled": db.execute('SELECT 1 FROM settlements WHERE date=?', (ds,)).fetchone() is not None,
                     "next_reset": datetime.combine(today + timedelta(days=1), time(), ZoneInfo(cfg['timezone'])).isoformat(),

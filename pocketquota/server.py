@@ -207,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
                 kind = {'html':'text/html','js':'application/javascript','css':'text/css','svg':'image/svg+xml'}[name.split('.')[-1]]
                 return self.respond(200, (STATIC/name).read_bytes(), kind+'; charset=utf-8')
             if not write and path == '/api/health':
-                return self.respond(200, {'ok': True, 'version': '0.3.0'})
+                return self.respond(200, {'ok': True, 'version': '0.3.1'})
             if not write and path == '/openapi.json':
                 from .api_spec import specification
                 return self.respond(200,specification())

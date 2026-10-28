@@ -202,6 +202,7 @@ async function refresh(animate = true) {
   const epoch = ++refreshEpoch;
   const previousBalances = state.d?.initialized ? { ...state.d.balances } : null;
   const prior = state.d?.initialized ? gaugeData() : null;
+  const priorPool = state.d?.initialized ? dailyPoolGauge() : null;
   const dashboard = await api("/api/dashboard");
   if (epoch !== refreshEpoch) return;
   if (!dashboard.initialized) { state.d = dashboard; return setup(); }
@@ -235,6 +236,8 @@ async function refresh(animate = true) {
   const currentGauge = gaugeData();
   if (animate && prior && currentGauge.remaining !== prior.remaining)
     playQuotaEffect(currentGauge.remaining > prior.remaining ? "income" : "expense", prior);
+  else if (animate && priorPool && dailyPoolGauge().balance !== priorPool.balance)
+    playQuotaEffect(dailyPoolGauge().balance > priorPool.balance ? "income" : "expense", priorPool, true);
 }
 function appearanceModal() {
   modal(
@@ -263,20 +266,28 @@ function gaugeData() {
     percent: cap ? Math.min(100, Math.max(0, (remaining / cap) * 100)) : 0,
   };
 }
-function gauge() {
-  const g = gaugeData();
-  if (appearance.shape === "ring")
-    return `<div class="orbit-layout"><div class="quota-orbit" id="quota-gauge" role="progressbar" aria-label="剩余额度比例" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.percent}"><svg viewBox="0 0 180 180" aria-hidden="true"><defs><linearGradient id="orbit-gradient"><stop offset="0%" class="orbit-stop-a"/><stop offset="100%" class="orbit-stop-b"/></linearGradient></defs><circle class="orbit-track" cx="90" cy="90" r="76"/><circle class="orbit-fill" cx="90" cy="90" r="76" stroke-dasharray="477.522" stroke-dashoffset="${477.522 * (1 - g.percent / 100)}"/></svg><div class="orbit-center"><strong>${g.percent.toFixed(1)}<small>%</small></strong></div></div><div class="orbit-caption"><strong>${yuan(g.remaining)}</strong><small>OF ${yuan(g.cap)}</small><div class="orbit-dots">•••</div></div></div>`;
-  return `<div class="progress-info"><span>${appearance.metric === "total" ? "总可消费预算" : "今日可用"} ${yuan(g.remaining)} / ${yuan(g.cap)}</span><strong>${g.percent.toFixed(1)}% 可用</strong></div><div class="quota-track" id="quota-gauge" role="progressbar" aria-label="剩余额度比例" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.percent}"><div class="quota-fill" data-width="${g.percent}"><span class="fill-sheen"></span></div><div class="track-ticks" aria-hidden="true"></div></div>`;
+function dailyPoolGauge() {
+  const pool = state.d.daily_pool;
+  const balance = pool?.balance ?? state.d.balances.daily;
+  const cap = pool?.funded ?? Math.max(0, balance);
+  return { remaining: Math.max(0, balance), balance, cap,
+    percent: cap ? Math.max(0, Math.min(100, balance / cap * 100)) : 0 };
 }
-function playQuotaEffect(type, prior) {
+function gauge() {
+  const g = gaugeData(), p = dailyPoolGauge();
+  const label = appearance.metric === "total" ? "总可消费预算" : "今日可用额度";
+  if (appearance.shape === "ring")
+    return `<div class="orbit-layout dual-orbit-layout"><div class="quota-orbit" id="quota-gauge" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.percent}"><svg viewBox="0 0 180 180" aria-hidden="true"><defs><linearGradient id="orbit-gradient"><stop offset="0%" class="orbit-stop-a"/><stop offset="100%" class="orbit-stop-b"/></linearGradient><linearGradient id="pool-orbit-gradient"><stop offset="0%" stop-color="#51d4c4"/><stop offset="100%" stop-color="#91e8d9"/></linearGradient></defs><circle class="orbit-track" cx="90" cy="90" r="76"/><circle class="orbit-fill" cx="90" cy="90" r="76" stroke-dasharray="477.522" stroke-dashoffset="${477.522 * (1 - g.percent / 100)}"/><circle class="orbit-track pool-orbit-track" cx="90" cy="90" r="56"/><circle class="pool-orbit-fill" cx="90" cy="90" r="56" stroke-dasharray="351.858" stroke-dashoffset="${351.858 * (1 - p.percent / 100)}"/></svg><div class="orbit-center"><strong>${g.percent.toFixed(1)}<small>%</small></strong></div></div><div class="orbit-caption dual-caption"><div class="gauge-caption"><span class="gauge-name"><i class="gauge-key"></i>${label}</span><strong>${yuan(g.remaining)}</strong><small>OF ${yuan(g.cap)}</small></div><div class="gauge-caption pool-caption" role="progressbar" aria-label="日常池总余额" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.percent}" aria-valuetext="${yuan(p.balance)}，累计入池 ${yuan(p.cap)}"><span class="gauge-name"><i class="gauge-key pool-key"></i>日常池总余额</span><strong>${yuan(p.balance)}</strong><small>${p.percent.toFixed(1)}% · OF ${yuan(p.cap)}</small></div></div></div>`;
+  return `<div class="dual-lines"><div class="quota-lane"><div class="progress-info"><span>${label}</span><strong>${yuan(g.remaining)} <small>/ ${yuan(g.cap)}</small></strong></div><div class="quota-track" id="quota-gauge" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${g.percent}"><div class="quota-fill" data-width="${g.percent}"><span class="fill-sheen"></span></div><div class="track-ticks" aria-hidden="true"></div></div></div><div class="quota-lane pool-lane"><div class="progress-info"><span>日常池总余额</span><strong>${yuan(p.balance)} <small>/ ${yuan(p.cap)}</small></strong></div><div class="quota-track" id="daily-pool-gauge" role="progressbar" aria-label="日常池总余额" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.percent}" aria-valuetext="${yuan(p.balance)}，累计入池 ${yuan(p.cap)}"><div class="pool-quota-fill" data-width="${p.percent}"></div><div class="track-ticks" aria-hidden="true"></div></div></div></div>`;
+}
+function playQuotaEffect(type, prior, poolMode = false) {
   if (
     !appearance.motion ||
     matchMedia("(prefers-reduced-motion: reduce)").matches ||
     state.page !== "home"
   )
     return;
-  const gauge = $("#quota-gauge"),
+  const gauge = $(poolMode && appearance.shape !== "ring" ? "#daily-pool-gauge" : "#quota-gauge"),
     canvas = $("#quota-fx");
   if (!gauge || !canvas) return;
   const card = canvas.parentElement.getBoundingClientRect(),
@@ -290,8 +301,8 @@ function playQuotaEffect(type, prior) {
   ctx.scale(dpr, dpr);
   const style = getComputedStyle(gauge);
   const colors = [
-    style.getPropertyValue("--accent").trim(),
-    style.getPropertyValue("--accent2").trim(),
+    poolMode ? "#51d4c4" : style.getPropertyValue("--accent").trim(),
+    poolMode ? "#91e8d9" : style.getPropertyValue("--accent2").trim(),
     "#c7e4ff",
     appearance.theme === "light" ? "#7464d7" : "#ffffff",
   ];
@@ -310,15 +321,16 @@ function playQuotaEffect(type, prior) {
     sc.fillRect(0, 0, 40, 40);
     return sprite;
   });
-  const g = gaugeData(),
+  const g = poolMode ? dailyPoolGauge() : gaugeData(),
     income = type === "income",
     cx = rect.left - card.left + rect.width / 2,
     cy = rect.top - card.top + rect.height / 2;
   const oldPct = prior?.percent ?? g.percent;
   const low = Math.min(oldPct, g.percent) / 100,
     high = Math.max(oldPct, g.percent) / 100;
-  const fill = $(".quota-fill", gauge),
-    arc = $(".orbit-fill", gauge);
+  const fill = $(poolMode ? ".pool-quota-fill" : ".quota-fill", gauge),
+    arc = $(poolMode ? ".pool-orbit-fill" : ".orbit-fill", gauge);
+  const circumference = poolMode ? 351.858 : 477.522;
   if (fill) {
     fill.style.transition = "none";
     fill.style.width = oldPct + "%";
@@ -331,11 +343,11 @@ function playQuotaEffect(type, prior) {
   }
   if (arc) {
     arc.style.transition = "none";
-    arc.style.strokeDashoffset = 477.522 * (1 - oldPct / 100);
+    arc.style.strokeDashoffset = circumference * (1 - oldPct / 100);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         arc.style.transition = "";
-        arc.style.strokeDashoffset = 477.522 * (1 - g.percent / 100);
+        arc.style.strokeDashoffset = circumference * (1 - g.percent / 100);
       }),
     );
   }
@@ -346,8 +358,8 @@ function playQuotaEffect(type, prior) {
       const a =
         -Math.PI / 2 +
         (low + Math.random() * Math.max(0.025, high - low)) * Math.PI * 2;
-      x = cx + Math.cos(a) * rect.width * 0.42;
-      y = cy + Math.sin(a) * rect.height * 0.42;
+      x = cx + Math.cos(a) * rect.width * (poolMode ? 0.311 : 0.422);
+      y = cy + Math.sin(a) * rect.height * (poolMode ? 0.311 : 0.422);
     } else {
       x =
         rect.left -
@@ -453,7 +465,7 @@ function render() {
   const d = state.d;
   document.body.classList.toggle("bankrupt", d.bankrupt);
   $("#app").innerHTML =
-    `<div class="shell"><aside class="sidebar">${brand}<div class="nav-label">PERSONAL CONSOLE</div><nav class="nav" aria-label="主导航">${navItems.map(([id, label]) => `<button data-nav="${id}" class="${id === state.page ? "active" : ""}" ${id === state.page ? 'aria-current="page"' : ""}>${icon(id)}${label}</button>`).join("")}</nav><div class="side-foot"><span>自托管 · v0.3.0</span><span>◉</span></div></aside><main class="workspace"><header class="topbar"><div class="ledger-name" title="${esc(d.settings.name)}">${esc(d.settings.name)}</div><div class="top-actions"><span class="hide-mobile">${esc(d.today)} · ${esc(d.settings.timezone)}</span><span><i class="status-dot"></i>${state.session.demo ? "演示数据" : "私人账本"}</span><a class="guide-link" href="/guide.html" target="_blank" rel="noopener">指南 ↗</a><button class="appearance-button" id="appearance" title="主题、配色与额度条">◐ <span>外观</span></button><button class="ghost" id="refresh" title="刷新">↻</button><button class="avatar" id="account-avatar" aria-label="账号设置">${esc((state.session.username || "P").slice(0, 1).toUpperCase())}</button></div></header><div id="page">${{ home: home, ledger: ledger, review: review, rules: rules, agents: agents, account: account }[state.page]()}</div></main></div>`;
+    `<div class="shell"><aside class="sidebar">${brand}<div class="nav-label">PERSONAL CONSOLE</div><nav class="nav" aria-label="主导航">${navItems.map(([id, label]) => `<button data-nav="${id}" class="${id === state.page ? "active" : ""}" ${id === state.page ? 'aria-current="page"' : ""}>${icon(id)}${label}</button>`).join("")}</nav><div class="side-foot"><span>自托管 · v0.3.1</span><span>◉</span></div></aside><main class="workspace"><header class="topbar"><div class="ledger-name" title="${esc(d.settings.name)}">${esc(d.settings.name)}</div><div class="top-actions"><span class="hide-mobile">${esc(d.today)} · ${esc(d.settings.timezone)}</span><span><i class="status-dot"></i>${state.session.demo ? "演示数据" : "私人账本"}</span><a class="guide-link" href="/guide.html" target="_blank" rel="noopener">指南 ↗</a><button class="appearance-button" id="appearance" title="主题、配色与额度条">◐ <span>外观</span></button><button class="ghost" id="refresh" title="刷新">↻</button><button class="avatar" id="account-avatar" aria-label="账号设置">${esc((state.session.username || "P").slice(0, 1).toUpperCase())}</button></div></header><div id="page">${{ home: home, ledger: ledger, review: review, rules: rules, agents: agents, account: account }[state.page]()}</div></main></div>`;
   document.querySelectorAll("[data-nav]").forEach(
     (b) =>
       (b.onclick = async () => {
@@ -704,6 +716,8 @@ function entryModal(kind = "expense") {
     await refresh(false);
     const currentGauge = gaugeData();
     if (currentGauge.remaining !== prior.remaining) playQuotaEffect(currentGauge.remaining > prior.remaining ? "income" : "expense", prior);
+  else if (animate && priorPool && dailyPoolGauge().balance !== priorPool.balance)
+    playQuotaEffect(dailyPoolGauge().balance > priorPool.balance ? "income" : "expense", priorPool, true);
     toast(
       r.allocation?.flex
         ? `已记录 · 日常 ${yuan(r.allocation.daily)} + 灵活 ${yuan(r.allocation.flex)}`

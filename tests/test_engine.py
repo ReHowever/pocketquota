@@ -206,4 +206,29 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(sum(self.balances().values()),before)
 
 
+    def test_daily_pool_reference_does_not_inflate_on_settlement_or_reversal(self):
+        original=self.ledger.dashboard()['daily_pool']
+        self.assertEqual(original,{'balance':18000,'funded':18000,'percent':100.0})
+        expense=self.write('entry',{'amount':'30.00'})
+        self.assertEqual(self.ledger.dashboard()['daily_pool']['funded'],18000)
+        self.write('settle',{})
+        self.write('settle',{})
+        self.assertEqual(self.ledger.dashboard()['daily_pool']['funded'],18000)
+        self.write('reverse',{'id':expense['id'],'reason':'test'})
+        self.assertEqual(self.ledger.dashboard()['daily_pool']['funded'],18000)
+        income=self.write('entry',{'kind':'income','amount':'20.00'})
+        self.assertEqual(self.ledger.dashboard()['daily_pool']['funded'],20000)
+        self.write('reverse',{'id':income['id'],'reason':'test'})
+        self.assertEqual(self.ledger.dashboard()['daily_pool']['funded'],18000)
+
+    def test_daily_pool_funding_and_negative_balance_are_bounded(self):
+        self.write('entry',{'kind':'transfer','pool':'flex','to_pool':'daily','amount':'10.00'})
+        self.assertEqual(self.ledger.dashboard()['daily_pool']['funded'],19000)
+        self.write('adjust',{'pool':'daily','balance':'-10.00','reason':'test'})
+        stats=self.ledger.dashboard()['daily_pool']
+        self.assertEqual(stats['balance'],-1000)
+        self.assertEqual(stats['percent'],0)
+        self.assertEqual(stats['funded'],19000)
+
+
 if __name__=='__main__':unittest.main()

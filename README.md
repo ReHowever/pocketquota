@@ -1,10 +1,10 @@
-<h1 align="center">PocketQuota v0.3.0 — 扮演一个被邪恶的计划限额的ai</h1>
+<h1 align="center">PocketQuota v0.3.1 — 扮演一个被邪恶的计划限额的ai</h1>
 
 <p align="center">
   <img src="docs/hero.svg" alt="PocketQuota — 像管理 Agent 一样管理自己的消费习惯" width="100%">
 </p>
 
-**v0.3.0** · 蓄水池与保险柜动效、直接改余额、旧账无损迁入与 Harness 共享账本。[更新详情](docs/updates-v0.3.md)
+**v0.3.1** · 双环与双光轨同时显示今日额度和日常池总余额，配合蓄水池、保险柜与共享账本。[更新详情](docs/updates-v0.3.md)
 
 
 <p align="center">

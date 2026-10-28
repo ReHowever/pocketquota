@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "PocketQuota Agent API",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "Personal budget journal. No bank transactions. Isolated user books; web and agent tokens share the same account. Scoped read/write/manage access."
   },
   "servers": [
